@@ -31,6 +31,13 @@ This release baseline includes:
 - page-3 scenes + direct controls
 - improved full-panel swipe handling
 
+## Related repositories
+
+- [Brockian-Ultra-Cricket-server](https://github.com/chaoticvoltlabs/Brockian-Ultra-Cricket-server)
+  - BUC server and compact panel-facing API layer
+- [Brockian-Ultra-Cricket-homeassistant](https://github.com/chaoticvoltlabs/Brockian-Ultra-Cricket-homeassistant)
+  - Home Assistant package and payload layer
+
 ## Repo layout
 
 - [`main/main.c`](main/main.c)
