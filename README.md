@@ -2,6 +2,19 @@
 
 Firmware for the Waveshare ESP32-S3-LCD-4.3 panel that acts as a purpose-built client for the BUC server.
 
+## At a glance
+
+<img src="docs/images/4.3_inch_panel_page1.jpg" width="260" alt="BUC panel page 1 weather view">
+<img src="docs/images/4.3_inch_panel_page2.jpg" width="260" alt="BUC panel page 2 indoor view">
+<img src="docs/images/4.3_inch_panel_page3.jpg" width="260" alt="BUC panel page 3 scenes and direct controls">
+
+The current 4.3 inch client is a compact wall panel with:
+
+- a weather page
+- an indoor climate page
+- a scene and direct-control page
+- swipe-based full-screen navigation
+
 ## Current role in the system
 
 The panel is the device-side UI layer in this chain:
