@@ -1,0 +1,29 @@
+# ESP-IDF build artifacts
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+
+# Auto-generated build counter
+build_number.txt
+main/build_number.h
+
+# Python
+__pycache__/
+*.pyc
+tools/*.bin
+tools/*.png
+
+# Secrets (never commit)
+main/secrets.h
+
+# Private reference material / screenshots / other projects
+local_data/
+old_code/
+
+# Editor
+.vscode/
+*.swp
+
+
