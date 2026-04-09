@@ -104,3 +104,12 @@ idf.py -p PORT monitor
 - [`docs/page3-scenes-and-direct-control.md`](docs/page3-scenes-and-direct-control.md)
 
 Historical working notes remain in `local_data` in the private development repo, but repo-facing docs should prefer the `docs/` directory.
+
+## Copyright & license
+
+PolyForm Noncommercial License 1.0.0
+with Commercial Use by Explicit Permission Only
+See LICENSE.txt
+
+
+Copyright (c) 2026 Robin Kluit / Chaoticvolt.
