@@ -1,0 +1,14 @@
+## ESP-IDF Managed Components
+## Run `idf.py add-dependency` or edit here, then `idf.py update-dependencies`
+
+dependencies:
+  idf: ">=5.2.0"
+
+  ## LVGL 8.3.x  (last stable v8 branch)
+  lvgl/lvgl: "~8.3.11"
+
+  ## Capacitive touch driver for GT911  (Waveshare 7" uses GT911)
+  espressif/esp_lcd_touch_gt911: "~1.1.2"
+
+  ## RGB LCD panel helper (already part of IDF 5.x / 6.x but listed for clarity)
+  # espressif/esp_lcd: ">=1.0.0"   # built-in, no extra entry needed

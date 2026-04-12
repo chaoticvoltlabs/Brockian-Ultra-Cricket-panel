@@ -1,48 +1,62 @@
 # BUC Panel
 
-Firmware for the Waveshare ESP32-S3-LCD-4.3 panel that acts as a purpose-built client for the BUC server.
+Firmware targets for multiple BUC panel hardware variants.
 
-## At a glance
+## What this repo is for
 
-<img src="docs/images/4.3_inch_panel_page1.jpg" width="260" alt="BUC panel page 1 weather view">
-<img src="docs/images/4.3_inch_panel_page2.jpg" width="260" alt="BUC panel page 2 indoor view">
-<img src="docs/images/4.3_inch_panel_page3.jpg" width="260" alt="BUC panel page 3 scenes and direct controls">
+This repository serves two audiences:
 
-The current 4.3 inch client is a compact wall panel with:
+1. people who want to build and personalize the full BUC ecosystem
+2. people who already have supported panel hardware and want to get a panel running with as little guesswork as possible
 
-- a weather page
-- an indoor climate page
-- a scene and direct-control page
-- swipe-based full-screen navigation
+This repo is the panel-side firmware layer in the wider BUC setup.
 
-## Current role in the system
+## Choose your path
 
-The panel is the device-side UI layer in this chain:
+### I have supported hardware and want to get a panel running
 
-1. Home Assistant builds canonical weather, overview, indoor, and scene entities.
-2. BUC reads those entities and exposes compact HTTP models.
-3. The panel renders those models locally with LVGL and sends control intents back through BUC.
+Start with the hardware target that matches your device.
+
+### I want to build and personalize the full BUC ecosystem
+
+Start here at the repo root, read the hardware overview below, and then combine this panel firmware with the related BUC server and Home Assistant repositories.
+
+## Hardware targets
+
+- [`targets/waveshare-4.3-esp32s3`](targets/waveshare-4.3-esp32s3/README.md)
+  - the current live-oriented 4.3 inch panel client
+- [`targets/waveshare-7b-esp32s3-showcase`](targets/waveshare-7b-esp32s3-showcase/README.md)
+  - a 7 inch showcase/reference build with clock, storm forecast, and mancave control pages
+
+## Why the repo is structured this way
+
+Different panel builds are not just cosmetic variants. Display timing, touch wiring, resolution, and UI density all change with the hardware. The repository now keeps those distinctions explicit so builders can start from the right target instead of reverse-engineering which files belong to which panel.
+
+## How this fits into BUC
+
+The broader chain is:
+
+1. Home Assistant provides canonical entities and automations
+2. BUC server reshapes those into compact panel-friendly models and control endpoints
+3. the panel firmware in this repo renders those models locally and sends control intents back upstream
 
 This repository owns:
 
-- local rendering
+- device-side UI rendering
 - touch interaction
+- hardware-specific display and touch setup
 - Wi-Fi connectivity
-- polling of `GET /api/panel/weather`
-- `POST /api/panel/control` intents for page 3
+- panel-side integration patterns for BUC-facing APIs
 
-## Current firmware status
+## Current direction
 
-Current release milestone:
+- keep the 4.3 inch target focused on the live BUC data path
+- keep the 7B control page as a showcase/reference instead of immediately folding it into live integration
+- move shared code out later, only after each hardware target is clear and stable
 
-- `v0.7.0`
+## Transitional note
 
-This release baseline includes:
-
-- weather page
-- indoor page
-- page-3 scenes + direct controls
-- improved full-panel swipe handling
+The repository root still contains the original 4.3 inch layout for compatibility while the new `targets/` structure is being established. New work should prefer the target directories above.
 
 ## Related repositories
 
@@ -51,59 +65,14 @@ This release baseline includes:
 - [Brockian-Ultra-Cricket-homeassistant](https://github.com/chaoticvoltlabs/Brockian-Ultra-Cricket-homeassistant)
   - Home Assistant package and payload layer
 
-## Repo layout
+## Quick guidance
 
-- [`main/main.c`](main/main.c)
-  - boot, LVGL init, page construction
-- [`main/ui_weather.c`](main/ui_weather.c)
-  - left weather column
-- [`main/ui_pages.c`](main/ui_pages.c)
-  - horizontal page navigation
-- [`main/ui_indoor.c`](main/ui_indoor.c)
-  - indoor climate grid
-- [`main/ui_controls.c`](main/ui_controls.c)
-  - page-3 scenes and direct controls
-- [`main/panel_api.c`](main/panel_api.c)
-  - HTTP polling and control POSTs
-- [`main/net_wifi.c`](main/net_wifi.c)
-  - STA Wi-Fi client
-- `main/secrets.h`
-  - local credentials and upstream host config, created from `main/secrets.example.h`
+- If you want working panel firmware quickly: pick a folder under `targets/` and stay inside that target.
+- If you want to personalize the whole stack: decide which target is your hardware baseline first, then adapt the server, HA entities, and panel UI together.
 
 ## Build
 
-ESP-IDF environment must be active.
-
-Example:
-
-```bash
-source /home/icz8922/.espressif/v6.0/esp-idf/export.sh
-idf.py build
-```
-
-Typical output binary:
-
-- `build/buc_panel_client.bin`
-
-## Flash
-
-Typical commands:
-
-```bash
-idf.py -p PORT flash
-```
-
-```bash
-idf.py -p PORT monitor
-```
-
-## Documentation
-
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/build-and-release.md`](docs/build-and-release.md)
-- [`docs/page3-scenes-and-direct-control.md`](docs/page3-scenes-and-direct-control.md)
-
-Historical working notes remain in `local_data` in the private development repo, but repo-facing docs should prefer the `docs/` directory.
+Build from inside the target directory you want to use. Each target has its own `README.md`, `main/`, partition layout, and local config expectations.
 
 ## Copyright & license
 

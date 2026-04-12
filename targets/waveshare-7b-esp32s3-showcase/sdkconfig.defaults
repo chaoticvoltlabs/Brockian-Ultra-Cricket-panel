@@ -1,0 +1,53 @@
+# ── Chip target ──────────────────────────────────────────────────────────────
+CONFIG_IDF_TARGET="esp32s3"
+
+# ── Flash & PSRAM ─────────────────────────────────────────────────────────────
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_16mb.csv"
+
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+CONFIG_SPIRAM_USE_MALLOC=y
+# CONFIG_SPIRAM_MEMTEST is not set
+
+# ── CPU ───────────────────────────────────────────────────────────────────────
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
+# ── Console: UART0 via CH343P (port 1) — frees GPIO 19/20 for touch I2C ──────
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+# CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG is not set
+# CONFIG_ESP_CONSOLE_USB_CDC is not set
+
+# ── Stack sizes ───────────────────────────────────────────────────────────────
+# WiFi + LVGL + display init in app_main needs >> 3584 bytes
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# ── Panic: delay before reboot so the message flushes to UART ─────────────────
+CONFIG_ESP_SYSTEM_PANIC_REBOOT_DELAY_SECONDS=5
+
+# ── FreeRTOS tick rate ────────────────────────────────────────────────────────
+CONFIG_FREERTOS_HZ=1000
+
+# ── LVGL (managed component uses Kconfig, not lv_conf.h) ─────────────────────
+CONFIG_LV_COLOR_DEPTH_16=y
+
+# Fonts used in clock_ui.c and ornament/layout iterations
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_18=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_24=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_32=y
+CONFIG_LV_FONT_MONTSERRAT_40=y
+
+# Widgets
+CONFIG_LV_USE_METER=y
+CONFIG_LV_USE_ARC=y
+CONFIG_LV_USE_LABEL=y
+
+# Theme
+CONFIG_LV_USE_THEME_DEFAULT=y
+CONFIG_LV_THEME_DEFAULT_DARK=y

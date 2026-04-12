@@ -17,8 +17,6 @@ tools/*.png
 
 # Secrets (never commit)
 main/secrets.h
-targets/*/main/secrets.h
-targets/*/main/config.h
 
 # Private reference material / screenshots / other projects
 local_data/
@@ -27,4 +25,5 @@ old_code/
 # Editor
 .vscode/
 *.swp
+
 

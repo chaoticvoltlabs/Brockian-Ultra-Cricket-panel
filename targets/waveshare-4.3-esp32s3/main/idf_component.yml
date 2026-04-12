@@ -1,0 +1,7 @@
+dependencies:
+  idf:
+    version: ">=6.0.0"
+  lvgl/lvgl: "9.2.0"
+  # In ESP-IDF v6 cJSON is no longer a built-in "json" component; it lives
+  # in the component manager as espressif/cjson.
+  espressif/cjson: "*"

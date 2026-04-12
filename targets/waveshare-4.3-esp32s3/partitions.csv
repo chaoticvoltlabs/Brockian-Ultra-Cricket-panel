@@ -1,0 +1,9 @@
+# Custom partition table for BUC render test.
+# Flash is 8 MB (CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y). The default 1 MB factory
+# is too small once WiFi + LVGL fonts are in, so we give factory 3 MB and
+# leave ~5 MB free for future use (e.g. OTA, asset storage).
+#
+# Name,     Type, SubType, Offset,   Size,     Flags
+nvs,        data, nvs,     0x9000,   0x6000,
+phy_init,   data, phy,     0xf000,   0x1000,
+factory,    app,  factory, 0x10000,  0x300000,
