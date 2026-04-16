@@ -8,9 +8,10 @@
  *
  *   • num_fbs=2  – one framebuffer is scanned out while LVGL renders into the
  *     other, avoiding visible in-place redraw artefacts.
- *   • bounce_buffer_size_px = LCD_H_RES*10  – DMA reads via SRAM bounce,
+ *   • bounce_buffer_size_px = LCD_H_RES*20  – DMA reads via SRAM bounce,
  *     not directly from PSRAM, which is required for reliable operation on
- *     ESP32-S3.
+ *     ESP32-S3.  Larger bounce window absorbs brief PSRAM-bus contention
+ *     (e.g. during the 10s weather fetch) without scanline tearing.
  *   • full_refresh=1  – LVGL renders a complete frame into the back buffer.
  *   • flush_cb  – pushes the rendered frame to PSRAM, asks the RGB driver to
  *     switch to that framebuffer, then waits for VSYNC before returning.
@@ -20,6 +21,7 @@
  */
 
 #include <string.h>
+#include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -37,6 +39,7 @@ static const char *TAG = "display";
 static esp_lcd_panel_handle_t s_panel   = NULL;
 static lv_disp_draw_buf_t     s_draw_buf;
 static TaskHandle_t           s_flush_task = NULL;
+static volatile uint32_t      s_vsync_count = 0;
 
 static bool IRAM_ATTR rgb_vsync_cb(esp_lcd_panel_handle_t panel,
                                    const esp_lcd_rgb_panel_event_data_t *edata,
@@ -45,6 +48,8 @@ static bool IRAM_ATTR rgb_vsync_cb(esp_lcd_panel_handle_t panel,
     LV_UNUSED(panel);
     LV_UNUSED(edata);
     LV_UNUSED(user_ctx);
+
+    s_vsync_count++;
 
     BaseType_t high_task_wakeup = pdFALSE;
     if (s_flush_task != NULL) {
@@ -69,9 +74,13 @@ static void lvgl_flush_cb(lv_disp_drv_t *drv, const lv_area_t *area,
     esp_cache_msync(color_map, fb_bytes,
                     ESP_CACHE_MSYNC_FLAG_DIR_C2M | ESP_CACHE_MSYNC_FLAG_UNALIGNED);
 
-    ulTaskNotifyValueClear(NULL, ULONG_MAX);
     ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(s_panel, 0, 0, LCD_H_RES, LCD_V_RES, color_map));
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    uint32_t pre = s_vsync_count;
+    ulTaskNotifyValueClear(NULL, ULONG_MAX);
+    while (s_vsync_count == pre) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    }
 
     lv_disp_flush_ready(drv);
 }
@@ -97,7 +106,7 @@ void display_init(lv_disp_t **out_disp)
         },
         .data_width     = 16,
         .num_fbs        = 2,                        /* double framebuffer    */
-        .bounce_buffer_size_px = LCD_H_RES * 10,    /* SRAM bounce for PSRAM DMA */
+        .bounce_buffer_size_px = LCD_H_RES * 20,    /* SRAM bounce for PSRAM DMA */
         .hsync_gpio_num  = LCD_PIN_HSYNC,
         .vsync_gpio_num  = LCD_PIN_VSYNC,
         .de_gpio_num     = LCD_PIN_DE,

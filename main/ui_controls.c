@@ -1,17 +1,17 @@
 /**
  * @file  ui_controls.c
- * @brief Page 3 — scene triggers + direct light/switch controls.
+ * @brief Page 4 — scene triggers + direct light/switch controls.
  *
  * Layout (right-side 500 × 480):
  *
  *   ┌─────────────────────────────────────────────┐
- *   │  SCENES                                     │  section label
+ *   │  ACTIES                                     │  section label
  *   │  ┌──────┐ ┌──────┐ ┌──────┐ ┌──────┐       │  4 scene buttons
  *   │  │Avond │ │Alles │ │Buiten│ │ Film │       │  (1 × 4, h=100)
  *   │  │      │ │ uit  │ │      │ │      │       │
  *   │  └──────┘ └──────┘ └──────┘ └──────┘       │
  *   │  ──────────────────────────────────────     │  separator
- *   │  DIRECT CONTROL                             │  section label
+ *   │  BEDIENING                                  │  section label
  *   │  ┌──────────┐ ┌──────────┐ ┌──────────┐    │  6 target buttons
  *   │  │▎Hoofdlicht│ │▎Keuken   │ │▎Kastlamp │    │  (2 × 3, h=85)
  *   │  └──────────┘ └──────────┘ └──────────┘    │
@@ -31,6 +31,7 @@
 
 #include "ui_controls.h"
 #include "buc_display.h"
+#include "ui_theme.h"
 #include <stdint.h>
 
 /* ── Grid geometry ─────────────────────────────────────────────────── */
@@ -46,8 +47,8 @@
 #define SCENE_Y         50      /* buttons top (label + 22 px gap)     */
 
 /* Separator — aligned with the divider under the clock in the left
- * column (~Y 187).  Extra SCENES height comes at the expense of the
- * DIRECT CONTROL row gap; row-2 bottom stays on the baro-graph baseline. */
+ * column (~Y 187).  Extra ACTIES height comes at the expense of the
+ * BEDIENING row gap; row-2 bottom stays on the baro-graph baseline. */
 #define SEP_Y          186
 
 /* Target buttons: 2 rows × 3 */
@@ -94,21 +95,37 @@ static const char *scene_labels[SCENE_N] = {
 
 static const char *target_labels[TARGET_N] = {
     "Light A", "Light B", "Light C",
-    "Media",  "",      ""
+    "Media", "", ""
 };
 
 /* ── Runtime handles ──────────────────────────────────────────────── */
 static lv_obj_t *s_scene_btn[SCENE_N];
 static lv_obj_t *s_scene_accent[SCENE_N];
 static lv_obj_t *s_scene_lbl[SCENE_N];
+static lv_obj_t *s_scene_hdr;
 static lv_obj_t *s_target_btn[TARGET_N];
 static lv_obj_t *s_target_accent[TARGET_N];
 static lv_obj_t *s_target_lbl[TARGET_N];
+static lv_obj_t *s_target_hdr;
+static lv_obj_t *s_sep;
 static lv_obj_t *s_debug_ip_lbl;
 static lv_obj_t *s_debug_mac_lbl;
 static ui_controls_target_press_cb_t s_target_press_cb;
 static ui_controls_scene_press_cb_t s_scene_press_cb;
 static int s_active_scene = -1;
+static ui_ctrl_state_t s_target_state[TARGET_N];
+static bool s_scene_enabled[SCENE_N];
+
+static lv_color_t col_btn_bg(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x0D0D0D) : COL_BTN_BG; }
+static lv_color_t col_btn_border(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x242424) : COL_BTN_BORDER; }
+static lv_color_t col_btn_press_bg(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x171717) : COL_BTN_PRESS_BG; }
+static lv_color_t col_btn_press_bd(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x323232) : COL_BTN_PRESS_BD; }
+static lv_color_t col_btn_label(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x948C7F) : COL_BTN_LABEL; }
+static lv_color_t col_sect_label(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x5E564B) : COL_SECT_LABEL; }
+static lv_color_t col_dis_bg(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x060606) : COL_DIS_BG; }
+static lv_color_t col_dis_border(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x141414) : COL_DIS_BORDER; }
+static lv_color_t col_dis_label(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x35312B) : COL_DIS_LABEL; }
+static lv_color_t col_separator(void) { return ui_theme_is_night_mode() ? lv_color_hex(0x181410) : COL_SEPARATOR; }
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -117,7 +134,7 @@ static lv_obj_t *section_label(lv_obj_t *parent, int32_t y,
 {
     lv_obj_t *lbl = lv_label_create(parent);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl, COL_SECT_LABEL, 0);
+    lv_obj_set_style_text_color(lbl, col_sect_label(), 0);
     lv_obj_set_style_text_letter_space(lbl, 3, 0);
     lv_label_set_text(lbl, text);
     lv_obj_set_pos(lbl, MARGIN, y);
@@ -138,15 +155,15 @@ static lv_obj_t *make_btn(lv_obj_t *parent, int32_t x, int32_t y,
     lv_obj_add_flag(btn, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     /* Normal state */
-    lv_obj_set_style_bg_color(btn, COL_BTN_BG, 0);
+    lv_obj_set_style_bg_color(btn, col_btn_bg(), 0);
     lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(btn, COL_BTN_BORDER, 0);
+    lv_obj_set_style_border_color(btn, col_btn_border(), 0);
     lv_obj_set_style_border_width(btn, BTN_BORDER_W, 0);
     lv_obj_set_style_radius(btn, BTN_RADIUS, 0);
 
     /* Pressed state — subtle lift */
-    lv_obj_set_style_bg_color(btn, COL_BTN_PRESS_BG, LV_STATE_PRESSED);
-    lv_obj_set_style_border_color(btn, COL_BTN_PRESS_BD, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(btn, col_btn_press_bg(), LV_STATE_PRESSED);
+    lv_obj_set_style_border_color(btn, col_btn_press_bd(), LV_STATE_PRESSED);
 
     return btn;
 }
@@ -213,7 +230,7 @@ static void make_scene_btn(lv_obj_t *parent, int col)
 
     lv_obj_t *lbl = lv_label_create(btn);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_16, 0);
-    lv_obj_set_style_text_color(lbl, COL_BTN_LABEL, 0);
+    lv_obj_set_style_text_color(lbl, col_btn_label(), 0);
     lv_label_set_text(lbl, scene_labels[col]);
     lv_obj_center(lbl);
     s_scene_lbl[col] = lbl;
@@ -244,7 +261,7 @@ static void make_target_btn(lv_obj_t *parent, int row, int col)
     /* Label — centred in the full button area */
     lv_obj_t *lbl = lv_label_create(btn);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, 0);
-    lv_obj_set_style_text_color(lbl, COL_BTN_LABEL, 0);
+    lv_obj_set_style_text_color(lbl, col_btn_label(), 0);
     lv_label_set_text(lbl, target_labels[idx]);
     lv_obj_center(lbl);
     s_target_lbl[idx] = lbl;
@@ -254,25 +271,32 @@ static void make_target_btn(lv_obj_t *parent, int row, int col)
 
 void ui_controls_create(lv_obj_t *parent)
 {
+    for (int i = 0; i < SCENE_N; i++) {
+        s_scene_enabled[i] = true;
+    }
+    for (int i = 0; i < TARGET_N; i++) {
+        s_target_state[i] = CTRL_OFF;
+    }
+
     /* ── Top section: scene / automation triggers ────────────────── */
-    section_label(parent, SCENE_LABEL_Y, "SCENES");
+    s_scene_hdr = section_label(parent, SCENE_LABEL_Y, "SCENES");
 
     for (int i = 0; i < SCENE_N; i++) {
         make_scene_btn(parent, i);
     }
 
     /* ── Separator ───────────────────────────────────────────────── */
-    lv_obj_t *sep = lv_obj_create(parent);
-    lv_obj_remove_style_all(sep);
-    lv_obj_clear_flag(sep,
+    s_sep = lv_obj_create(parent);
+    lv_obj_remove_style_all(s_sep);
+    lv_obj_clear_flag(s_sep,
         LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_pos(sep, MARGIN, SEP_Y);
-    lv_obj_set_size(sep, CONTENT_W, 1);
-    lv_obj_set_style_bg_color(sep, COL_SEPARATOR, 0);
-    lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
+    lv_obj_set_pos(s_sep, MARGIN, SEP_Y);
+    lv_obj_set_size(s_sep, CONTENT_W, 1);
+    lv_obj_set_style_bg_color(s_sep, col_separator(), 0);
+    lv_obj_set_style_bg_opa(s_sep, LV_OPA_COVER, 0);
 
     /* ── Bottom section: direct target controls ──────────────────── */
-    section_label(parent, TARGET_LABEL_Y, "DIRECT CONTROL");
+    s_target_hdr = section_label(parent, TARGET_LABEL_Y, "DIRECT CONTROL");
 
     for (int r = 0; r < TARGET_ROWS; r++) {
         for (int c = 0; c < TARGET_COLS; c++) {
@@ -282,13 +306,13 @@ void ui_controls_create(lv_obj_t *parent)
 
     s_debug_ip_lbl = lv_label_create(parent);
     lv_obj_set_style_text_font(s_debug_ip_lbl, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(s_debug_ip_lbl, COL_SECT_LABEL, 0);
+    lv_obj_set_style_text_color(s_debug_ip_lbl, col_sect_label(), 0);
     lv_label_set_text(s_debug_ip_lbl, "");
     lv_obj_align(s_debug_ip_lbl, LV_ALIGN_BOTTOM_RIGHT, -10, -14);
 
     s_debug_mac_lbl = lv_label_create(parent);
     lv_obj_set_style_text_font(s_debug_mac_lbl, &lv_font_montserrat_12, 0);
-    lv_obj_set_style_text_color(s_debug_mac_lbl, COL_SECT_LABEL, 0);
+    lv_obj_set_style_text_color(s_debug_mac_lbl, col_sect_label(), 0);
     lv_label_set_text(s_debug_mac_lbl, "");
     lv_obj_align(s_debug_mac_lbl, LV_ALIGN_BOTTOM_RIGHT, -10, 0);
 }
@@ -312,36 +336,49 @@ void ui_controls_set_active_scene(int index)
         lv_obj_set_style_bg_color(s_scene_accent[i],
             active ? COL_ON_ACCENT : COL_OFF_ACCENT, 0);
         lv_obj_set_style_text_color(s_scene_lbl[i],
-            active ? COL_ON_LABEL : COL_BTN_LABEL, 0);
+            active ? COL_ON_LABEL : col_btn_label(), 0);
     }
 }
 
 void ui_controls_set_scene_slot(int index, const char *label, bool enabled)
 {
     if (index < 0 || index >= SCENE_N) return;
+    s_scene_enabled[index] = enabled;
 
     lv_label_set_text(s_scene_lbl[index], (label != NULL) ? label : "");
     if (enabled) {
         lv_obj_add_flag(s_scene_btn[index], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(s_scene_btn[index], COL_BTN_BG, 0);
-        lv_obj_set_style_border_color(s_scene_btn[index], COL_BTN_BORDER, 0);
-        lv_obj_set_style_text_color(s_scene_lbl[index], COL_BTN_LABEL, 0);
+        lv_obj_set_style_bg_color(s_scene_btn[index], col_btn_bg(), 0);
+        lv_obj_set_style_border_color(s_scene_btn[index], col_btn_border(), 0);
+        lv_obj_set_style_text_color(s_scene_lbl[index], col_btn_label(), 0);
     } else {
         lv_obj_clear_flag(s_scene_btn[index], LV_OBJ_FLAG_CLICKABLE);
-        lv_obj_set_style_bg_color(s_scene_btn[index], COL_DIS_BG, 0);
-        lv_obj_set_style_border_color(s_scene_btn[index], COL_DIS_BORDER, 0);
-        lv_obj_set_style_text_color(s_scene_lbl[index], COL_DIS_LABEL, 0);
+        lv_obj_set_style_bg_color(s_scene_btn[index], col_dis_bg(), 0);
+        lv_obj_set_style_border_color(s_scene_btn[index], col_dis_border(), 0);
+        lv_obj_set_style_text_color(s_scene_lbl[index], col_dis_label(), 0);
         lv_obj_set_style_bg_color(s_scene_accent[index], COL_OFF_ACCENT, 0);
     }
 }
 
 void ui_controls_set_debug_identity(const char *ipv4, const char *mac)
 {
+    char buf[48];
+
     if (s_debug_ip_lbl != NULL) {
-        lv_label_set_text(s_debug_ip_lbl, (ipv4 != NULL) ? ipv4 : "");
+        if (ipv4 != NULL && ipv4[0] != '\0') {
+            lv_snprintf(buf, sizeof(buf), "IP %s", ipv4);
+            lv_label_set_text(s_debug_ip_lbl, buf);
+        } else {
+            lv_label_set_text(s_debug_ip_lbl, "");
+        }
     }
     if (s_debug_mac_lbl != NULL) {
-        lv_label_set_text(s_debug_mac_lbl, (mac != NULL) ? mac : "");
+        if (mac != NULL && mac[0] != '\0') {
+            lv_snprintf(buf, sizeof(buf), "MAC %s", mac);
+            lv_label_set_text(s_debug_mac_lbl, buf);
+        } else {
+            lv_label_set_text(s_debug_mac_lbl, "");
+        }
     }
 }
 
@@ -354,6 +391,7 @@ void ui_controls_set_target_label(int index, const char *label)
 void ui_controls_set_target_state(int index, ui_ctrl_state_t state)
 {
     if (index < 0 || index >= TARGET_N) return;
+    s_target_state[index] = state;
 
     lv_obj_t *btn = s_target_btn[index];
     lv_obj_t *acc = s_target_accent[index];
@@ -363,25 +401,64 @@ void ui_controls_set_target_state(int index, ui_ctrl_state_t state)
     case CTRL_ON:
         lv_obj_set_style_bg_color(acc, COL_ON_ACCENT, 0);
         lv_obj_set_style_text_color(lbl, COL_ON_LABEL, 0);
-        lv_obj_set_style_bg_color(btn, COL_BTN_BG, 0);
-        lv_obj_set_style_border_color(btn, COL_BTN_BORDER, 0);
+        lv_obj_set_style_bg_color(btn, col_btn_bg(), 0);
+        lv_obj_set_style_border_color(btn, col_btn_border(), 0);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
         break;
 
     case CTRL_OFF:
         lv_obj_set_style_bg_color(acc, COL_OFF_ACCENT, 0);
-        lv_obj_set_style_text_color(lbl, COL_BTN_LABEL, 0);
-        lv_obj_set_style_bg_color(btn, COL_BTN_BG, 0);
-        lv_obj_set_style_border_color(btn, COL_BTN_BORDER, 0);
+        lv_obj_set_style_text_color(lbl, col_btn_label(), 0);
+        lv_obj_set_style_bg_color(btn, col_btn_bg(), 0);
+        lv_obj_set_style_border_color(btn, col_btn_border(), 0);
         lv_obj_add_flag(btn, LV_OBJ_FLAG_CLICKABLE);
         break;
 
     case CTRL_UNAVAILABLE:
         lv_obj_set_style_bg_color(acc, COL_OFF_ACCENT, 0);
-        lv_obj_set_style_text_color(lbl, COL_DIS_LABEL, 0);
-        lv_obj_set_style_bg_color(btn, COL_DIS_BG, 0);
-        lv_obj_set_style_border_color(btn, COL_DIS_BORDER, 0);
+        lv_obj_set_style_text_color(lbl, col_dis_label(), 0);
+        lv_obj_set_style_bg_color(btn, col_dis_bg(), 0);
+        lv_obj_set_style_border_color(btn, col_dis_border(), 0);
         lv_obj_clear_flag(btn, LV_OBJ_FLAG_CLICKABLE);
         break;
+    }
+}
+
+ui_ctrl_state_t ui_controls_get_target_state(int index)
+{
+    if (index < 0 || index >= TARGET_N) {
+        return CTRL_UNAVAILABLE;
+    }
+
+    return s_target_state[index];
+}
+
+void ui_controls_apply_theme(void)
+{
+    if (s_scene_hdr == NULL) {
+        return;
+    }
+
+    lv_obj_set_style_text_color(s_scene_hdr, col_sect_label(), 0);
+    lv_obj_set_style_text_color(s_target_hdr, col_sect_label(), 0);
+    lv_obj_set_style_text_color(s_debug_ip_lbl, col_sect_label(), 0);
+    lv_obj_set_style_text_color(s_debug_mac_lbl, col_sect_label(), 0);
+    lv_obj_set_style_bg_color(s_sep, col_separator(), 0);
+
+    for (int i = 0; i < SCENE_N; i++) {
+        lv_obj_set_style_bg_color(s_scene_btn[i], col_btn_bg(), 0);
+        lv_obj_set_style_border_color(s_scene_btn[i], col_btn_border(), 0);
+        lv_obj_set_style_bg_color(s_scene_btn[i], col_btn_press_bg(), LV_STATE_PRESSED);
+        lv_obj_set_style_border_color(s_scene_btn[i], col_btn_press_bd(), LV_STATE_PRESSED);
+        ui_controls_set_scene_slot(i, lv_label_get_text(s_scene_lbl[i]), s_scene_enabled[i]);
+    }
+    ui_controls_set_active_scene(s_active_scene);
+
+    for (int i = 0; i < TARGET_N; i++) {
+        lv_obj_set_style_bg_color(s_target_btn[i], col_btn_bg(), 0);
+        lv_obj_set_style_border_color(s_target_btn[i], col_btn_border(), 0);
+        lv_obj_set_style_bg_color(s_target_btn[i], col_btn_press_bg(), LV_STATE_PRESSED);
+        lv_obj_set_style_border_color(s_target_btn[i], col_btn_press_bd(), LV_STATE_PRESSED);
+        ui_controls_set_target_state(i, s_target_state[i]);
     }
 }

@@ -21,6 +21,7 @@
  *     "humidity_pct":        int,
  *     "pressure_hpa":        int,
  *     "pressure_trend_24h":  [float, ...]   (N values, oldest -> newest)
+ *     "night_mode":         bool,      (optional, theme switch from HA)
  *     "indoor_zones":        [              (optional, up to 12 entries)
  *       { "temp_c": float, "rh_pct": float },   (null fields = missing)
  *       ...
@@ -37,6 +38,7 @@
 #include "ui_wind_strip.h"
 #include "ui_indoor.h"
 #include "ui_controls.h"
+#include "ui_theme.h"
 #include "net_wifi.h"
 #include "app_lvgl_lock.h"
 
@@ -75,6 +77,7 @@ static const char *TAG = "panel_api";
 #define PANEL_IP_MAX           16
 #define PANEL_SCENE_SLOTS       4
 #define PANEL_TARGET_SLOTS      6
+#define STORM_ALERT_GUST_BFT  8.0f
 
 typedef struct {
     char label[24];
@@ -146,6 +149,16 @@ static void init_default_profile(void)
     snprintf(s_profile_cfg.targets[3].target, sizeof(s_profile_cfg.targets[3].target), "%s", "media_power");
     snprintf(s_profile_cfg.targets[3].action, sizeof(s_profile_cfg.targets[3].action), "%s", "toggle");
     s_profile_cfg.targets[3].enabled = true;
+
+    snprintf(s_profile_cfg.targets[4].label, sizeof(s_profile_cfg.targets[4].label), "%s", "");
+    snprintf(s_profile_cfg.targets[4].target, sizeof(s_profile_cfg.targets[4].target), "%s", "");
+    snprintf(s_profile_cfg.targets[4].action, sizeof(s_profile_cfg.targets[4].action), "%s", "");
+    s_profile_cfg.targets[4].enabled = false;
+
+    snprintf(s_profile_cfg.targets[5].label, sizeof(s_profile_cfg.targets[5].label), "%s", "");
+    snprintf(s_profile_cfg.targets[5].target, sizeof(s_profile_cfg.targets[5].target), "%s", "");
+    snprintf(s_profile_cfg.targets[5].action, sizeof(s_profile_cfg.targets[5].action), "%s", "");
+    s_profile_cfg.targets[5].enabled = false;
 
     snprintf(s_profile_cfg.long_press.target, sizeof(s_profile_cfg.long_press.target), "%s", "scene_night");
     snprintf(s_profile_cfg.long_press.action, sizeof(s_profile_cfg.long_press.action), "%s", "activate");
@@ -406,6 +419,15 @@ static float j_num(const cJSON *obj, const char *key, float def)
     return cJSON_IsNumber(v) ? (float)v->valuedouble : def;
 }
 
+static bool j_bool(const cJSON *obj, const char *key, bool def)
+{
+    cJSON *v = cJSON_GetObjectItemCaseSensitive(obj, key);
+    if (cJSON_IsBool(v)) {
+        return cJSON_IsTrue(v);
+    }
+    return def;
+}
+
 /* ── Parse JSON and push values into the UI (under the LVGL lock) ──── */
 static bool parse_and_apply(const char *json)
 {
@@ -424,6 +446,7 @@ static bool parse_and_apply(const char *json)
         .pressure  = j_num(root, "pressure_hpa", 1013.0f),
         .wind_dir  = j_num(root, "wind_dir_deg",    0.0f),
     };
+    bool night_mode = j_bool(root, "night_mode", false);
 
     /* Extract the pressure trend array */
     float   trend[MAX_BARO_POINTS];
@@ -480,7 +503,12 @@ static bool parse_and_apply(const char *json)
         ui_weather_set_baro_trend(trend, trend_count);
     }
     ui_compass_set_direction(d.wind_dir);
+    ui_weather_set_storm_active(d.gust_bft >= STORM_ALERT_GUST_BFT);
     ui_wind_strip_update(d.wind_bft, d.gust_bft);
+    if (ui_theme_is_night_mode() != night_mode) {
+        ui_theme_set_night_mode(night_mode);
+        ui_theme_apply();
+    }
 
     /* Indoor zones — only touch when the API includes the array.
      * If absent, the display keeps its current state (boot placeholders

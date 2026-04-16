@@ -1,13 +1,15 @@
-# Page 3: Scenes And Direct Control
+# Control Page
+
+This file keeps the original name for continuity, but on the current 4.3 target the control page is page 4.
 
 ## Concept
 
-Page 3 is the scene/direct-control page for the compact panel client.
+The control page is the scene/direct-control page for the compact panel client.
 
 - top row: scenes
 - lower section: direct control
 
-The page keeps the same visual layout as the original control page, but the semantics are now split cleanly.
+The semantics are split cleanly between scene activation and direct toggles.
 
 ## Scenes
 

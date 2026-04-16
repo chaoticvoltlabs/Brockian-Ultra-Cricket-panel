@@ -17,14 +17,14 @@ void ui_weather_update(const demo_data_t *d);
 
 /**
  * Set the room climate data (shown as hero temp + secondary RH
- * on page 3 instead of outdoor temp / "Gevoel").
+ * on page 3 instead of outdoor temp / "Feels Like").
  */
 void ui_weather_set_room_climate(float temp_c, bool temp_valid,
                                   float rh_pct, bool rh_valid);
 
 /**
  * Notify the weather column which page is currently visible.
- * Pages 0-1: secondary line shows "Gevoel X°C".
+ * Pages 0-1: secondary line shows "Feels Like X°C".
  * Page 2:    secondary line shows local room RH%.
  */
 void ui_weather_set_page(int page);
@@ -36,5 +36,11 @@ void ui_weather_set_page(int page);
  * within the LVGL lock.
  */
 void ui_weather_set_baro_trend(const float *values, int count);
+
+/** Re-apply palette-dependent styles after a theme switch. */
+void ui_weather_apply_theme(void);
+
+/** Show or hide the global storm warning indicator. */
+void ui_weather_set_storm_active(bool active);
 
 #endif /* UI_WEATHER_H */

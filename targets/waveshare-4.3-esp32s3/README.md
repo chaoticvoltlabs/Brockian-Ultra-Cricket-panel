@@ -4,28 +4,27 @@ Live-oriented BUC panel firmware for the Waveshare ESP32-S3-LCD-4.3.
 
 ## Pages
 
-<img src="docs/images/4.3_inch_panel_page1.jpg" width="260" alt="4.3 inch panel page 1 weather view">
-<img src="docs/images/4.3_inch_panel_page2.jpg" width="260" alt="4.3 inch panel page 2 indoor view">
-<img src="docs/images/4.3_inch_panel_page3.jpg" width="260" alt="4.3 inch panel page 3 scenes and direct controls">
-
-- weather page
-- indoor climate page
-- scenes and direct control page
-- swipe-based full-screen navigation
+- page 1: compass + wind strip
+- page 2: analog clock
+- page 3: indoor climate
+- page 4: scenes and direct control
 
 ## Role
 
-This is the current compact wall-panel target tied to the BUC server data path.
+This is the compact live panel target that talks directly to the BUC server:
 
-It owns:
+- polls `GET /api/panel/config`
+- polls `GET /api/panel/weather`
+- posts `POST /api/panel/control`
 
-- local rendering
-- touch interaction
-- Wi-Fi connectivity
-- polling of `GET /api/panel/weather`
-- `POST /api/panel/control` intents for page 3
+## Current technical baseline
 
-## Local setup
+- swipe navigation is restored on the 4-page layout
+- renderer-wide night mode is driven from the upstream `night_mode` field
+- the storm warning triangle is a global overlay, visible on every page
+- the compass and wind strip follow the current clock-oriented visual language
+
+## Local config
 
 Create `main/secrets.h` from `main/secrets.example.h`.
 
@@ -35,12 +34,3 @@ Create `main/secrets.h` from `main/secrets.example.h`.
 cd targets/waveshare-4.3-esp32s3
 idf.py build
 ```
-
-## Main files
-
-- [`main/main.c`](main/main.c)
-- [`main/ui_weather.c`](main/ui_weather.c)
-- [`main/ui_indoor.c`](main/ui_indoor.c)
-- [`main/ui_controls.c`](main/ui_controls.c)
-- [`main/panel_api.c`](main/panel_api.c)
-- [`main/net_wifi.c`](main/net_wifi.c)

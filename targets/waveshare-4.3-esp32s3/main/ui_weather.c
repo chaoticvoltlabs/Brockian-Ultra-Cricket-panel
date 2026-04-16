@@ -11,7 +11,7 @@
  *   - Hero temperature              (Montserrat 48, white)
  *     Pages 0-1: outdoor temp, Page 2: local room temp
  *   - Secondary line                (Montserrat 20, medium grey)
- *     Pages 0-1: "Gevoel X°C", Page 2: "XX% RH"
+ *     Pages 0-1: "Feels Like X°C", Page 2: "XX% RH"
  *   - [pages 0-1] Outdoor RH%      (Montserrat 20, medium grey)
  *   - divider
  *   - [page 2 only] Clock HH:MM    (Montserrat 28, light grey, NTP)
@@ -30,6 +30,7 @@
 
 #include "ui_weather.h"
 #include "buc_display.h"
+#include "ui_theme.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -45,13 +46,15 @@
  * The graph is constrained to this so it aligns with the divider rules
  * and never sticks out past the perceived column edge. */
 #define CONTENT_W      ((COL_W * 55) / 100)   /* ≈148 px */
+#define CLOCK_CONTENT_W ((COL_W * 49) / 100)  /* slightly tighter clock page */
+#define ALERT_X        314
+#define ALERT_Y         36
+#define ALERT_SIZE      28
 
 /* ── Barometric trend ──────────────────────────────────────────────── */
 #define BARO_HISTORY    60        /* readings in circular buffer */
 #define GRAPH_H         36        /* graph container height px */
 #define BARO_MIN_RANGE   6.0f     /* minimum visible hPa range */
-
-#define COL_GRAPH_LINE  lv_color_hex(0xB0B8C8)   /* bright trend line (= COL_LIGHT_GREY) */
 
 /* ── Handles for runtime updates ───────────────────────────────────── */
 static lv_obj_t *lbl_temp;
@@ -59,17 +62,29 @@ static lv_obj_t *lbl_feel;
 static lv_obj_t *lbl_hum_out;     /* outdoor RH line (pages 0-1 only)    */
 static lv_obj_t *lbl_clock;       /* clock between secondary & wind (p2) */
 static lv_obj_t *lbl_clock_alt;   /* clock in spacer zone (pages 0-1)    */
+static lv_obj_t *lbl_date_info;   /* weekday + date (clock page only)    */
+static lv_obj_t *lbl_room_temp;   /* local room temp (clock page only)   */
+static lv_obj_t *lbl_trend_caption;
+static lv_obj_t *lbl_wind_title;
+static lv_obj_t *s_wind_row;
+static lv_obj_t *lbl_wind_main;
 static lv_obj_t *lbl_wind_bft;
+static lv_obj_t *lbl_wind_sep;
+static lv_obj_t *lbl_wind_gust;
 static lv_obj_t *lbl_wind_kmh;
+static lv_obj_t *lbl_gust_title;
 static lv_obj_t *lbl_gust_bft;
 static lv_obj_t *lbl_press_val;
 static lv_obj_t *s_graph;
+static lv_obj_t *s_storm_alert;
 
 /* Elements that swap visibility / margin between pages 0-1 and page 2 */
 static lv_obj_t *s_div1;       /* divider after secondary / humidity    */
 static lv_obj_t *s_div_clock;  /* divider after clock (page 2 only)    */
 static lv_obj_t *s_div2;       /* divider after gust                   */
+static lv_obj_t *s_div_room;   /* divider above room temp (clock page) */
 static lv_obj_t *s_div3;       /* divider before pressure (pages 0-1)  */
+static lv_obj_t *s_clock_gap;  /* flex spacer for clock page           */
 
 /* Pressure history circular buffer */
 static float s_baro[BARO_HISTORY];
@@ -85,6 +100,46 @@ static float s_room_temp    = 0;
 static bool  s_room_temp_ok = false;
 static float s_room_rh      = 0;
 static bool  s_room_rh_ok   = false;
+static float s_wind_bft     = 3.0f;
+static float s_gust_bft     = 5.0f;
+static bool  s_storm_active = false;
+
+static lv_color_t col_hero(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0xC9BCA5) : COL_WHITE;
+}
+
+static lv_color_t col_text_secondary(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0x8B8172) : COL_LIGHT_GREY;
+}
+
+static lv_color_t col_text_muted(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0x615A50) : COL_MED_GREY;
+}
+
+static lv_color_t col_separator(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0x181410) : COL_SEPARATOR;
+}
+
+static lv_color_t col_graph_line(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0x756D62) : lv_color_hex(0xB0B8C8);
+}
+
+static lv_color_t col_alert_idle(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0x3A342D) : lv_color_hex(0x67615A);
+}
+
+static lv_color_t col_alert_on(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0xD8A23E) : lv_color_hex(0xD39A30);
+}
+
+static lv_color_t theme_bft_color(float bft);
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 
@@ -108,9 +163,88 @@ static lv_obj_t *make_separator(lv_obj_t *parent, int32_t mb)
     lv_obj_add_flag(sep, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_set_size(sep, lv_pct(55), 1);
     lv_obj_set_style_bg_opa(sep, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(sep, COL_SEPARATOR, 0);
+    lv_obj_set_style_bg_color(sep, col_separator(), 0);
     lv_obj_set_style_margin_bottom(sep, mb, 0);
     return sep;
+}
+
+static void storm_blink_cb(void *var, int32_t value)
+{
+    lv_obj_t *obj = var;
+    if (obj == NULL) return;
+    lv_obj_set_style_text_opa(obj, (lv_opa_t)value, 0);
+}
+
+static void storm_alert_draw_cb(lv_event_t *e)
+{
+    lv_layer_t *layer = lv_event_get_layer(e);
+    if (!layer) return;
+
+    lv_obj_t *obj = lv_event_get_target(e);
+    lv_area_t a;
+    lv_obj_get_coords(obj, &a);
+
+    int32_t cx = (a.x1 + a.x2) / 2;
+    int32_t top = a.y1 + 1;
+    int32_t bottom = a.y2 - 1;
+
+    lv_draw_line_dsc_t line;
+    lv_draw_line_dsc_init(&line);
+    line.color = lv_obj_get_style_text_color(obj, 0);
+    line.opa = lv_obj_get_style_text_opa(obj, 0);
+    line.width = 3;
+    line.round_start = 1;
+    line.round_end = 1;
+
+    line.p1.x = cx;      line.p1.y = top;
+    line.p2.x = a.x1+2;  line.p2.y = bottom;
+    lv_draw_line(layer, &line);
+    line.p1.x = a.x1+2;  line.p1.y = bottom;
+    line.p2.x = a.x2-2;  line.p2.y = bottom;
+    lv_draw_line(layer, &line);
+    line.p1.x = a.x2-2;  line.p1.y = bottom;
+    line.p2.x = cx;      line.p2.y = top;
+    lv_draw_line(layer, &line);
+
+    lv_draw_rect_dsc_t mark;
+    lv_draw_rect_dsc_init(&mark);
+    mark.bg_color = line.color;
+    mark.bg_opa = line.opa;
+    mark.border_width = 0;
+    mark.radius = LV_RADIUS_CIRCLE;
+
+    lv_area_t stem = { cx - 1, a.y1 + 8, cx + 1, a.y1 + 16 };
+    lv_draw_rect(layer, &mark, &stem);
+
+    lv_area_t dot = { cx - 2, a.y1 + 20, cx + 2, a.y1 + 24 };
+    lv_draw_rect(layer, &mark, &dot);
+}
+
+static void apply_storm_alert_style(void)
+{
+    if (s_storm_alert == NULL) return;
+
+    lv_anim_del(s_storm_alert, storm_blink_cb);
+
+    if (s_storm_active) {
+        lv_obj_set_style_text_color(s_storm_alert, col_alert_on(), 0);
+        lv_obj_set_style_text_opa(s_storm_alert, LV_OPA_30, 0);
+
+        lv_anim_t anim;
+        lv_anim_init(&anim);
+        lv_anim_set_var(&anim, s_storm_alert);
+        lv_anim_set_exec_cb(&anim, storm_blink_cb);
+        lv_anim_set_values(&anim, LV_OPA_30, LV_OPA_COVER);
+        lv_anim_set_time(&anim, 1300);
+        lv_anim_set_playback_time(&anim, 1300);
+        lv_anim_set_repeat_count(&anim, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_start(&anim);
+    } else {
+        lv_obj_set_style_text_color(s_storm_alert, col_alert_idle(), 0);
+        lv_obj_set_style_text_opa(s_storm_alert, LV_OPA_30, 0);
+    }
+
+    lv_obj_invalidate(s_storm_alert);
 }
 
 /** Beaufort to approximate km/h. */
@@ -134,7 +268,7 @@ static const grad_stop_t GRAD[] = {
 };
 #define GRAD_STOPS  ((int)(sizeof(GRAD) / sizeof(GRAD[0])))
 
-static lv_color_t bft_color(float bft)
+static lv_color_t theme_bft_color(float bft)
 {
     if (bft <= 0.0f) bft = 0.0f;
     if (bft >= 12.0f) bft = 12.0f;
@@ -150,11 +284,15 @@ static lv_color_t bft_color(float bft)
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
 
-    return lv_color_make(
+    lv_color_t base = lv_color_make(
         (uint8_t)((int)GRAD[seg].r + (int)((int)GRAD[seg + 1].r - (int)GRAD[seg].r) * t),
         (uint8_t)((int)GRAD[seg].g + (int)((int)GRAD[seg + 1].g - (int)GRAD[seg].g) * t),
         (uint8_t)((int)GRAD[seg].b + (int)((int)GRAD[seg + 1].b - (int)GRAD[seg].b) * t)
     );
+    if (!ui_theme_is_night_mode()) {
+        return base;
+    }
+    return lv_color_mix(base, lv_color_hex(0x000000), 96);
 }
 
 /* ── Barometric trend draw callback ────────────────────────────────── */
@@ -170,11 +308,10 @@ static void graph_draw_cb(lv_event_t *e)
     lv_area_t ca;
     lv_obj_get_coords(obj, &ca);
 
-    /* Force width to CONTENT_W so the graph aligns with the dividers
-     * instead of filling the full flex container. x stays at COL_X. */
-    const int32_t gx = COL_X;
+    /* Use the object's actual width so page-specific sizing stays aligned. */
+    const int32_t gx = ca.x1;
     const int32_t gy = ca.y1;
-    const int32_t gw = CONTENT_W;
+    const int32_t gw = lv_area_get_width(&ca);
     const int32_t gh = lv_area_get_height(&ca);
 
     /* Find min/max pressure in buffer */
@@ -200,7 +337,7 @@ static void graph_draw_cb(lv_event_t *e)
 
     lv_draw_line_dsc_t ln;
     lv_draw_line_dsc_init(&ln);
-    ln.color       = COL_GRAPH_LINE;
+    ln.color       = col_graph_line();
     ln.width       = 1;
     ln.opa         = LV_OPA_COVER;
     ln.round_start = 0;
@@ -235,12 +372,15 @@ static void refresh_hero(void)
         else
             snprintf(buf, sizeof(buf), "--.-\u00B0C");
     } else {
-        snprintf(buf, sizeof(buf), "%.1f\u00B0C", (double)s_outdoor_temp);
+        if (s_page == 1)
+            snprintf(buf, sizeof(buf), "%.1f\u00B0", (double)s_outdoor_temp);
+        else
+            snprintf(buf, sizeof(buf), "%.1f\u00B0C", (double)s_outdoor_temp);
     }
     lv_label_set_text(lbl_temp, buf);
 }
 
-/* ── Secondary line (Gevoel vs room RH depending on page) ────────── */
+/* ── Secondary line (Feels vs room RH depending on page) ────────── */
 
 static void refresh_secondary(void)
 {
@@ -252,9 +392,19 @@ static void refresh_secondary(void)
             snprintf(buf, sizeof(buf), "--%%  RH");
         lv_label_set_text(lbl_feel, buf);
     } else {
-        snprintf(buf, sizeof(buf), "Gevoel %.0f\u00B0C", (double)s_feel_temp);
+        snprintf(buf, sizeof(buf), "Feels %.0f\u00B0C", (double)s_feel_temp);
         lv_label_set_text(lbl_feel, buf);
     }
+}
+
+static void refresh_room_temp_line(void)
+{
+    char buf[32];
+    if (s_room_temp_ok)
+        snprintf(buf, sizeof(buf), s_page == 1 ? "%.1f\u00B0" : "%.1f\u00B0C", (double)s_room_temp);
+    else
+        snprintf(buf, sizeof(buf), s_page == 1 ? "--.-\u00B0" : "--.-\u00B0C");
+    lv_label_set_text(lbl_room_temp, buf);
 }
 
 /* ── Page-aware column layout ─────────────────────────────────────── */
@@ -267,25 +417,114 @@ static void refresh_secondary(void)
 static void apply_page_layout(void)
 {
     if (s_page == 2) {
-        /* Page 3: room context — clock between hero/wind, no humidity line */
+        /* Control page: room context — clock between hero/wind, no humidity line */
+        lv_obj_remove_flag(lbl_feel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_hum_out, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(lbl_clock, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_div_clock, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_clock_alt, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_date_info, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_room_temp, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_div_room, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(s_div3, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_clock_gap, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_flex_grow(s_clock_gap, 0);
+        lv_obj_remove_flag(lbl_wind_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_wind_kmh, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_gust_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_gust_bft, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_text_font(lbl_temp, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_font(lbl_hum_out, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(lbl_wind_main, &lv_font_montserrat_36, 0);
         lv_obj_set_style_pad_bottom(lbl_feel, 14, 0);
         lv_obj_set_style_margin_bottom(s_div1, 12, 0);
         lv_obj_set_style_margin_bottom(s_div2, 16, 0);
+    } else if (s_page == 1) {
+        /* Clock page: compact weather summary + date + room temperature */
+        lv_obj_add_flag(lbl_feel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_hum_out, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_clock, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_div_clock, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_clock_alt, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_date_info, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_room_temp, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_div_room, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_div3, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_clock_gap, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_flex_grow(s_clock_gap, 1);
+        lv_obj_add_flag(lbl_wind_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_wind_row, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_wind_main, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_wind_kmh, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_gust_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_gust_bft, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_width(s_div1, CLOCK_CONTENT_W);
+        lv_obj_set_width(s_div2, CLOCK_CONTENT_W);
+        lv_obj_set_width(s_div_room, CLOCK_CONTENT_W);
+        lv_obj_set_width(s_div3, CLOCK_CONTENT_W);
+        lv_obj_set_width(s_wind_row, CLOCK_CONTENT_W);
+        lv_obj_set_width(lbl_date_info, CLOCK_CONTENT_W);
+        lv_obj_set_width(s_graph, CLOCK_CONTENT_W);
+        lv_obj_set_style_text_font(lbl_temp, &lv_font_montserrat_36, 0);
+        lv_obj_set_style_text_font(lbl_hum_out, &lv_font_montserrat_16, 0);
+        lv_obj_set_style_text_font(lbl_wind_bft, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(lbl_wind_sep, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(lbl_wind_gust, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_text_font(lbl_date_info, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(lbl_room_temp, &lv_font_montserrat_28, 0);
+        lv_obj_set_style_pad_bottom(lbl_temp, 8, 0);
+        lv_obj_set_style_pad_bottom(lbl_hum_out, 16, 0);
+        lv_obj_set_style_margin_bottom(s_wind_row, 8, 0);
+        lv_obj_set_style_margin_bottom(s_div1, 16, 0);
+        lv_obj_set_style_margin_bottom(s_div2, 14, 0);
+        lv_obj_set_style_margin_bottom(s_div_room, 14, 0);
+        lv_obj_set_style_margin_bottom(s_div3, 14, 0);
+        lv_obj_set_style_pad_bottom(lbl_press_val, 4, 0);
+        lv_obj_set_style_pad_bottom(s_graph, 2, 0);
+        lv_obj_set_style_pad_bottom(lbl_trend_caption, 0, 0);
+        lv_obj_set_style_pad_bottom(lbl_date_info, 16, 0);
+        lv_obj_set_style_pad_bottom(lbl_room_temp, 8, 0);
+        lv_obj_set_style_pad_bottom(lbl_feel, 0, 0);
     } else {
-        /* Pages 1-2: weather — humidity line, clock in spacer zone */
+        /* Page 0: weather — humidity line, clock in spacer zone */
+        lv_obj_remove_flag(lbl_feel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(lbl_hum_out, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_clock, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(s_div_clock, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(lbl_clock_alt, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_date_info, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(lbl_room_temp, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_div_room, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_div3, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_clock_gap, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_flex_grow(s_clock_gap, 0);
+        lv_obj_remove_flag(lbl_wind_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(s_wind_row, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_wind_main, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_wind_kmh, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_gust_title, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(lbl_gust_bft, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_width(s_div1, CONTENT_W);
+        lv_obj_set_width(s_div2, CONTENT_W);
+        lv_obj_set_width(s_div_room, CONTENT_W);
+        lv_obj_set_width(s_div3, CONTENT_W);
+        lv_obj_set_width(s_wind_row, CONTENT_W);
+        lv_obj_set_width(lbl_date_info, CONTENT_W);
+        lv_obj_set_width(s_graph, CONTENT_W);
+        lv_obj_set_style_text_font(lbl_temp, &lv_font_montserrat_48, 0);
+        lv_obj_set_style_text_font(lbl_hum_out, &lv_font_montserrat_20, 0);
+        lv_obj_set_style_text_font(lbl_wind_main, &lv_font_montserrat_36, 0);
+        lv_obj_set_style_pad_bottom(lbl_temp, 2, 0);
         lv_obj_set_style_pad_bottom(lbl_feel, 2, 0);
         lv_obj_set_style_margin_bottom(s_div1, 14, 0);
         lv_obj_set_style_margin_bottom(s_div2, 14, 0);
+        lv_obj_set_style_margin_bottom(s_wind_row, 0, 0);
+        lv_obj_set_style_pad_bottom(lbl_hum_out, 14, 0);
+        lv_obj_set_style_pad_bottom(lbl_wind_bft, 0, 0);
+        lv_obj_set_style_pad_bottom(lbl_press_val, 0, 0);
+        lv_obj_set_style_pad_bottom(s_graph, 2, 0);
+        lv_obj_set_style_pad_bottom(lbl_trend_caption, 0, 0);
+        lv_obj_set_style_pad_bottom(lbl_room_temp, 10, 0);
     }
 }
 
@@ -307,12 +546,30 @@ static void clock_timer_cb(lv_timer_t *t)
     }
     lv_label_set_text(lbl_clock, buf);
     lv_label_set_text(lbl_clock_alt, buf);
+
+    char date_buf[48];
+    if (ti.tm_year > (2020 - 1900)) {
+        strftime(date_buf, sizeof(date_buf), "%A\n%d %B", &ti);
+    } else {
+        snprintf(date_buf, sizeof(date_buf), "---");
+    }
+    lv_label_set_text(lbl_date_info, date_buf);
 }
 
 /* ── Public API ────────────────────────────────────────────────────── */
 
 void ui_weather_create(lv_obj_t *parent)
 {
+    s_storm_alert = lv_obj_create(parent);
+    lv_obj_remove_style_all(s_storm_alert);
+    lv_obj_set_pos(s_storm_alert, ALERT_X, ALERT_Y);
+    lv_obj_set_size(s_storm_alert, ALERT_SIZE, ALERT_SIZE);
+    lv_obj_clear_flag(s_storm_alert, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_storm_alert, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_flag(s_storm_alert, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(s_storm_alert, storm_alert_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
+    apply_storm_alert_style();
+
     /* ── Transparent column container (no card background) ─────────── */
     lv_obj_t *col = lv_obj_create(parent);
     lv_obj_remove_style_all(col);
@@ -327,17 +584,17 @@ void ui_weather_create(lv_obj_t *parent)
     lv_obj_add_flag(col, LV_OBJ_FLAG_EVENT_BUBBLE);
 
     /* ── Hero temperature ──────────────────────────────────────────── */
-    lbl_temp = make_label(col, &lv_font_montserrat_48, COL_WHITE,
+    lbl_temp = make_label(col, &lv_font_montserrat_48, col_hero(),
                           "11.7\u00B0C");
     lv_obj_set_style_pad_bottom(lbl_temp, 2, 0);
 
     /* ── Feels-like (compact, integer, subdued) ────────────────────── */
-    lbl_feel = make_label(col, &lv_font_montserrat_20, COL_MED_GREY,
-                          "Gevoel 1\u00B0C");
+    lbl_feel = make_label(col, &lv_font_montserrat_20, col_text_muted(),
+                          "Feels 1\u00B0C");
     lv_obj_set_style_pad_bottom(lbl_feel, 14, 0);   /* adjusted per page */
 
-    /* ── Outdoor humidity (pages 0-1 only, same style as Gevoel) ─── */
-    lbl_hum_out = make_label(col, &lv_font_montserrat_20, COL_MED_GREY,
+    /* ── Outdoor humidity (pages 0-1 only, same style as Feels) ─── */
+    lbl_hum_out = make_label(col, &lv_font_montserrat_20, col_text_muted(),
                              "43% RH");
     lv_obj_set_style_pad_bottom(lbl_hum_out, 14, 0);
 
@@ -345,46 +602,78 @@ void ui_weather_create(lv_obj_t *parent)
     s_div1 = make_separator(col, 14);
 
     /* ── Clock (page 2 only — NTP time, subordinate to hero temp) ── */
-    lbl_clock = make_label(col, &lv_font_montserrat_28, COL_LIGHT_GREY,
+    lbl_clock = make_label(col, &lv_font_montserrat_28, col_text_secondary(),
                            "--:--");
     lv_obj_set_style_pad_bottom(lbl_clock, 14, 0);
 
     s_div_clock = make_separator(col, 14);
 
     /* ── Wind section (3 lines: label, value, km/h) ────────────────── */
-    make_label(col, &lv_font_montserrat_16, COL_LIGHT_GREY, "Wind");
+    lbl_wind_title = make_label(col, &lv_font_montserrat_16, col_text_secondary(), "Wind");
 
-    lbl_wind_bft = make_label(col, &lv_font_montserrat_36,
-                              bft_color(3.0f), "3");
-    lv_obj_set_style_margin_top(lbl_wind_bft, 2, 0);
+    lbl_wind_main = make_label(col, &lv_font_montserrat_36,
+                              theme_bft_color(3.0f), "3");
+    lv_obj_set_style_margin_top(lbl_wind_main, 2, 0);
+
+    s_wind_row = lv_obj_create(col);
+    lv_obj_remove_style_all(s_wind_row);
+    lv_obj_set_size(s_wind_row, CONTENT_W, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(s_wind_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(s_wind_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(s_wind_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(s_wind_row, 8, 0);
+    lv_obj_set_style_margin_top(s_wind_row, 2, 0);
+
+    lbl_wind_bft = make_label(s_wind_row, &lv_font_montserrat_28, theme_bft_color(3.0f), "3");
+    lbl_wind_sep = make_label(s_wind_row, &lv_font_montserrat_28, col_text_secondary(), "/");
+    lbl_wind_gust = make_label(s_wind_row, &lv_font_montserrat_28, theme_bft_color(5.0f), "5");
 
     lbl_wind_kmh = make_label(col, &lv_font_montserrat_12,
-                              COL_MED_GREY, "15 km/h");
+                              col_text_muted(), "15 km/h");
     lv_obj_set_style_margin_top(lbl_wind_kmh, 1, 0);
     lv_obj_set_style_pad_bottom(lbl_wind_kmh, 10, 0);
 
     /* ── Gust section (2 lines: label, value) ────────────────────── */
-    make_label(col, &lv_font_montserrat_16, COL_LIGHT_GREY, "Vlagen");
+    lbl_gust_title = make_label(col, &lv_font_montserrat_16, col_text_secondary(), "Vlagen");
 
     lbl_gust_bft = make_label(col, &lv_font_montserrat_36,
-                              bft_color(5.0f), "5");
+                              theme_bft_color(5.0f), "5");
     lv_obj_set_style_margin_top(lbl_gust_bft, 2, 0);
     lv_obj_set_style_pad_bottom(lbl_gust_bft, 14, 0);
 
     /* ── Divider after gust (margin switches per page) ───────────── */
     s_div2 = make_separator(col, 14);
 
+    s_clock_gap = lv_obj_create(col);
+    lv_obj_remove_style_all(s_clock_gap);
+    lv_obj_set_size(s_clock_gap, 1, 1);
+    lv_obj_clear_flag(s_clock_gap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_clock_gap, LV_OBJ_FLAG_HIDDEN);
+
     /* ── Clock (pages 0-1 — in the zone between gust and pressure) ── */
-    lbl_clock_alt = make_label(col, &lv_font_montserrat_28, COL_LIGHT_GREY,
+    lbl_clock_alt = make_label(col, &lv_font_montserrat_28, col_text_secondary(),
                                "--:--");
     lv_obj_set_style_pad_bottom(lbl_clock_alt, 10, 0);
 
-    /* ── Divider before pressure — pages 0-1 only ────────────────── */
+    lbl_date_info = make_label(col, &lv_font_montserrat_16, col_text_secondary(),
+                               "---");
+    lv_obj_set_style_pad_bottom(lbl_date_info, 8, 0);
+    lv_label_set_long_mode(lbl_date_info, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_date_info, CONTENT_W);
+
+    s_div_room = make_separator(col, 14);
+
+    lbl_room_temp = make_label(col, &lv_font_montserrat_20, col_text_muted(),
+                               "--.-\u00B0C");
+    lv_obj_set_style_text_color(lbl_room_temp, col_text_secondary(), 0);
+    lv_obj_set_style_pad_bottom(lbl_room_temp, 10, 0);
+
+    /* ── Divider before pressure block ───────────────────────────── */
     s_div3 = make_separator(col, 14);
 
     /* ── Pressure + barometric trend (one visual unit) ────────────── */
     lbl_press_val = make_label(col, &lv_font_montserrat_14,
-                               COL_LIGHT_GREY, "995 hPa");
+                               col_text_secondary(), "995 hPa");
     lv_obj_set_style_pad_bottom(lbl_press_val, 0, 0);
 
     s_graph = lv_obj_create(col);
@@ -395,8 +684,8 @@ void ui_weather_create(lv_obj_t *parent)
     lv_obj_set_style_pad_bottom(s_graph, 2, 0);
 
     /* ── Trend caption ────────────────────────────────────────────── */
-    make_label(col, &lv_font_montserrat_12,
-               COL_MED_GREY, "laatste 24h");
+    lbl_trend_caption = make_label(col, &lv_font_montserrat_12,
+               col_text_muted(), "last 24h");
 
     /* ── Pre-fill pressure history with gentle simulated trend ─────── */
     for (int i = 0; i < BARO_HISTORY; i++) {
@@ -422,20 +711,33 @@ void ui_weather_update(const demo_data_t *d)
     s_outdoor_hum  = d->humidity;
     refresh_hero();
     refresh_secondary();
+    refresh_room_temp_line();
 
     snprintf(buf, sizeof(buf), "%.0f%% RH", (double)d->humidity);
     lv_label_set_text(lbl_hum_out, buf);
 
-    snprintf(buf, sizeof(buf), "%.0f", (double)d->wind_bft);
-    lv_label_set_text(lbl_wind_bft, buf);
-    lv_obj_set_style_text_color(lbl_wind_bft, bft_color(d->wind_bft), 0);
+    if (s_page != 1) {
+        snprintf(buf, sizeof(buf), "%.0f", (double)d->wind_bft);
+        lv_label_set_text(lbl_wind_main, buf);
+        lv_obj_set_style_text_color(lbl_wind_main, theme_bft_color(d->wind_bft), 0);
+    } else {
+        snprintf(buf, sizeof(buf), "%.0f", (double)d->wind_bft);
+        lv_label_set_text(lbl_wind_bft, buf);
+        lv_obj_set_style_text_color(lbl_wind_bft, theme_bft_color(d->wind_bft), 0);
+        snprintf(buf, sizeof(buf), "%.0f", (double)d->gust_bft);
+        lv_label_set_text(lbl_wind_gust, buf);
+        lv_obj_set_style_text_color(lbl_wind_gust, theme_bft_color(d->gust_bft), 0);
+    }
 
     snprintf(buf, sizeof(buf), "%d km/h", bft_to_kmh(d->wind_bft));
     lv_label_set_text(lbl_wind_kmh, buf);
 
     snprintf(buf, sizeof(buf), "%.0f", (double)d->gust_bft);
     lv_label_set_text(lbl_gust_bft, buf);
-    lv_obj_set_style_text_color(lbl_gust_bft, bft_color(d->gust_bft), 0);
+    lv_obj_set_style_text_color(lbl_gust_bft, theme_bft_color(d->gust_bft), 0);
+
+    s_wind_bft = d->wind_bft;
+    s_gust_bft = d->gust_bft;
 
     snprintf(buf, sizeof(buf), "%.0f hPa", (double)d->pressure);
     lv_label_set_text(lbl_press_val, buf);
@@ -471,6 +773,7 @@ void ui_weather_set_room_climate(float temp_c, bool temp_valid,
     s_room_temp_ok = temp_valid;
     s_room_rh      = rh_pct;
     s_room_rh_ok   = rh_valid;
+    refresh_room_temp_line();
     if (s_page == 2) {
         refresh_hero();
         refresh_secondary();
@@ -484,4 +787,46 @@ void ui_weather_set_page(int page)
     apply_page_layout();
     refresh_hero();
     refresh_secondary();
+}
+
+void ui_weather_apply_theme(void)
+{
+    if (lbl_temp == NULL) {
+        return;
+    }
+
+    lv_obj_set_style_text_color(lbl_temp, col_hero(), 0);
+    lv_obj_set_style_text_color(lbl_feel, col_text_muted(), 0);
+    lv_obj_set_style_text_color(lbl_hum_out, col_text_muted(), 0);
+    lv_obj_set_style_text_color(lbl_clock, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_clock_alt, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_date_info, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_room_temp, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_press_val, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_trend_caption, col_text_muted(), 0);
+    lv_obj_set_style_text_color(lbl_wind_title, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_wind_sep, col_text_secondary(), 0);
+    lv_obj_set_style_text_color(lbl_wind_kmh, col_text_muted(), 0);
+    lv_obj_set_style_text_color(lbl_gust_title, col_text_secondary(), 0);
+
+    lv_obj_set_style_bg_color(s_div1, col_separator(), 0);
+    lv_obj_set_style_bg_color(s_div_clock, col_separator(), 0);
+    lv_obj_set_style_bg_color(s_div2, col_separator(), 0);
+    lv_obj_set_style_bg_color(s_div_room, col_separator(), 0);
+    lv_obj_set_style_bg_color(s_div3, col_separator(), 0);
+
+    lv_obj_set_style_text_color(lbl_wind_main, theme_bft_color(s_wind_bft), 0);
+    lv_obj_set_style_text_color(lbl_wind_bft, theme_bft_color(s_wind_bft), 0);
+    lv_obj_set_style_text_color(lbl_wind_gust, theme_bft_color(s_gust_bft), 0);
+    lv_obj_set_style_text_color(lbl_gust_bft, theme_bft_color(s_gust_bft), 0);
+    apply_storm_alert_style();
+
+    lv_obj_invalidate(s_graph);
+}
+
+void ui_weather_set_storm_active(bool active)
+{
+    if (s_storm_active == active) return;
+    s_storm_active = active;
+    apply_storm_alert_style();
 }

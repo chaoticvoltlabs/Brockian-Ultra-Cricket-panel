@@ -7,6 +7,9 @@ dependencies:
   ## LVGL 8.3.x  (last stable v8 branch)
   lvgl/lvgl: "~8.3.11"
 
+  ## JSON parser for minimal live weather payload handling
+  espressif/cjson: "*"
+
   ## Capacitive touch driver for GT911  (Waveshare 7" uses GT911)
   espressif/esp_lcd_touch_gt911: "~1.1.2"
 

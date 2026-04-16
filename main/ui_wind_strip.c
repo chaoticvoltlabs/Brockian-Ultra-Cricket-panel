@@ -19,13 +19,14 @@
 
 #include "ui_wind_strip.h"
 #include "buc_display.h"
+#include "ui_theme.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdbool.h>
 
 /* ── Layout constants ──────────────────────────────────────────────── */
 #define STRIP_X        80        /* relative to page-right parent (was 380, minus 300) */
-#define STRIP_Y       390        /* top edge (y unchanged) */
+#define STRIP_Y       420        /* nudged further down to open more breathing room */
 #define STRIP_W       390        /* total width */
 #define STRIP_H        55        /* total height */
 
@@ -71,6 +72,16 @@ static bool      s_connected = false;   /* start red at boot until WiFi up */
 #define COL_MARKER_OK    lv_color_hex(0xFFFFFF)  /* white: transport ok   */
 #define COL_MARKER_ERR   lv_color_hex(0xE02828)  /* red:   no connectivity */
 
+static lv_color_t marker_ok(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0xC9BCA5) : COL_MARKER_OK;
+}
+
+static lv_color_t marker_err(void)
+{
+    return ui_theme_is_night_mode() ? lv_color_hex(0xA04840) : COL_MARKER_ERR;
+}
+
 /* ── Interpolate gradient colour at a Beaufort value ───────────────── */
 static lv_color_t grad_color(float bft)
 {
@@ -89,11 +100,15 @@ static lv_color_t grad_color(float bft)
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
 
-    return lv_color_make(
+    lv_color_t base = lv_color_make(
         (uint8_t)((int)GRAD[seg].r + (int)((int)GRAD[seg + 1].r - (int)GRAD[seg].r) * t),
         (uint8_t)((int)GRAD[seg].g + (int)((int)GRAD[seg + 1].g - (int)GRAD[seg].g) * t),
         (uint8_t)((int)GRAD[seg].b + (int)((int)GRAD[seg + 1].b - (int)GRAD[seg].b) * t)
     );
+    if (!ui_theme_is_night_mode()) {
+        return base;
+    }
+    return lv_color_mix(base, lv_color_hex(0x000000), 96);
 }
 
 /* ── Dim a colour by a brightness factor (0.0-1.0) ────────────────── */
@@ -166,7 +181,7 @@ static void draw_cb(lv_event_t *e)
 
         lv_draw_line_dsc_t ln;
         lv_draw_line_dsc_init(&ln);
-        ln.color = lv_color_hex(0xFFFFFF);
+        ln.color = marker_ok();
         ln.width = 1;
         ln.opa   = LV_OPA_40;
         ln.p1.x  = gx;
@@ -182,7 +197,7 @@ static void draw_cb(lv_event_t *e)
 
         lv_draw_rect_dsc_t d;
         lv_draw_rect_dsc_init(&d);
-        d.bg_color = s_connected ? COL_MARKER_OK : COL_MARKER_ERR;
+        d.bg_color = s_connected ? marker_ok() : marker_err();
         d.bg_opa   = LV_OPA_COVER;
         d.radius   = 1;
 
@@ -205,6 +220,8 @@ void ui_wind_strip_create(lv_obj_t *parent)
     lv_obj_set_pos(s_cont, STRIP_X, STRIP_Y);
     lv_obj_set_size(s_cont, STRIP_W, STRIP_H);
     lv_obj_clear_flag(s_cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s_cont, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_flag(s_cont, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_add_event_cb(s_cont, draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
 
     /* ── Wind value label above the marker (colour follows transport) ─ */
@@ -212,7 +229,7 @@ void ui_wind_strip_create(lv_obj_t *parent)
     lv_label_set_text(s_lbl_wind, "3");
     lv_obj_set_style_text_font(s_lbl_wind, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(s_lbl_wind,
-        s_connected ? COL_MARKER_OK : COL_MARKER_ERR, 0);
+        s_connected ? marker_ok() : marker_err(), 0);
     lv_obj_set_style_text_align(s_lbl_wind, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_width(s_lbl_wind, WIND_LBL_W);
 
@@ -224,6 +241,7 @@ void ui_wind_strip_update(float wind_bft, float gust_bft)
 {
     s_wind_bft = wind_bft;
     s_gust_bft = gust_bft;
+    if (s_cont == NULL || s_lbl_wind == NULL) return;
 
     /* Update wind value label text and position (centered above marker) */
     char buf[8];
@@ -249,7 +267,18 @@ void ui_wind_strip_set_connected(bool connected)
     s_connected = connected;
     if (s_lbl_wind) {
         lv_obj_set_style_text_color(s_lbl_wind,
-            s_connected ? COL_MARKER_OK : COL_MARKER_ERR, 0);
+            s_connected ? marker_ok() : marker_err(), 0);
     }
     if (s_cont) lv_obj_invalidate(s_cont);
+}
+
+void ui_wind_strip_apply_theme(void)
+{
+    if (s_lbl_wind) {
+        lv_obj_set_style_text_color(s_lbl_wind,
+            s_connected ? marker_ok() : marker_err(), 0);
+    }
+    if (s_cont) {
+        lv_obj_invalidate(s_cont);
+    }
 }

@@ -9,6 +9,8 @@ idf_component_register(
         "ui_pages.c"
         "ui_indoor.c"
         "ui_controls.c"
+        "ui_clock.c"
+        "ui_theme.c"
         "net_wifi.c"
         "panel_api.c"
     INCLUDE_DIRS

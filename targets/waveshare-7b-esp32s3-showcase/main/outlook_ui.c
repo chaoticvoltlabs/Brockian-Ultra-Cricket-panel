@@ -21,11 +21,30 @@
 #define CLR_FACE        lv_color_hex(0x121212)
 #define CLR_HAND        lv_color_hex(0xC1962E)
 
-static const int16_t s_wind_points[] = { 3, 4, 4, 5, 6, 5, 4, 3 };
-static const int16_t s_gust_points[] = { 5, 6, 6, 7, 8, 7, 6, 5 };
-static const int16_t s_current_wind_bft = 3;
-static const int16_t s_current_gust_bft = 6;
-static const int16_t s_current_dir_deg  = 225;
+static int16_t s_wind_points[8] = { 3, 4, 4, 5, 6, 5, 4, 3 };
+static int16_t s_gust_points[8] = { 5, 6, 6, 7, 8, 7, 6, 5 };
+static int16_t s_current_wind_bft = 3;
+static int16_t s_current_gust_bft = 6;
+static int16_t s_current_dir_deg  = 225;
+
+static lv_obj_t *s_compass;
+static lv_obj_t *s_wind_val_lbl;
+static lv_obj_t *s_gust_val_lbl;
+static lv_obj_t *s_wind_fill;
+static lv_obj_t *s_gust_fill;
+static lv_obj_t *s_chart;
+static lv_chart_series_t *s_wind_series;
+static lv_chart_series_t *s_gust_series;
+static lv_obj_t *s_peak_lbl;
+static lv_obj_t *s_chart_ref_label;
+static lv_obj_t *s_chart_ref_line;
+
+static const char *nl_cardinal(int deg)
+{
+    deg = ((deg % 360) + 360) % 360;
+    static const char *cards[] = { "N", "NO", "O", "ZO", "Z", "ZW", "W", "NW" };
+    return cards[((deg + 22) / 45) % 8];
+}
 
 static void style_label(lv_obj_t *obj, const lv_font_t *font, lv_color_t color)
 {
@@ -163,7 +182,7 @@ static void outlook_compass_draw_cb(lv_event_t *e)
      * Z label centre: (COMP_CX, COMP_CY+185) = (240,425).
      * Text centre:    (COMP_CX, COMP_CY+150) = (240,390).          */
     char dir_text[24];
-    snprintf(dir_text, sizeof(dir_text), "SW %d", s_current_dir_deg);
+    snprintf(dir_text, sizeof(dir_text), "%s %d", nl_cardinal(s_current_dir_deg), s_current_dir_deg);
     lv_draw_label_dsc_t dir_dsc;
     lv_draw_label_dsc_init(&dir_dsc);
     dir_dsc.font  = &lv_font_montserrat_20;
@@ -190,6 +209,7 @@ void outlook_ui_create(lv_obj_t *parent)
      *  Widget: x=448..928, y=46..526.
      *  Widget size = COMP_CX*2 × COMP_CY*2 = 480×480.               ───── */
     lv_obj_t *compass = lv_obj_create(parent);
+    s_compass = compass;
     lv_obj_set_size(compass, 480, 480);
     lv_obj_set_pos(compass, 448, 46);
     lv_obj_set_style_bg_opa(compass, LV_OPA_TRANSP, 0);
@@ -222,6 +242,7 @@ void outlook_ui_create(lv_obj_t *parent)
     char wind_buf[8];
     snprintf(wind_buf, sizeof(wind_buf), "%d", s_current_wind_bft);
     lv_obj_t *wind_val = lv_label_create(parent);
+    s_wind_val_lbl = wind_val;
     lv_label_set_text(wind_val, wind_buf);
     style_label(wind_val, &lv_font_montserrat_32, severity_color(s_current_wind_bft));
     lv_obj_align_to(wind_val, now_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 6);
@@ -234,6 +255,7 @@ void outlook_ui_create(lv_obj_t *parent)
     char gust_buf[8];
     snprintf(gust_buf, sizeof(gust_buf), "%d", s_current_gust_bft);
     lv_obj_t *gust_val = lv_label_create(parent);
+    s_gust_val_lbl = gust_val;
     lv_label_set_text(gust_val, gust_buf);
     style_label(gust_val, &lv_font_montserrat_32, severity_color(s_current_gust_bft));
     lv_obj_align_to(gust_val, slash, LV_ALIGN_OUT_RIGHT_MID, 12, 0);
@@ -245,6 +267,7 @@ void outlook_ui_create(lv_obj_t *parent)
 
     /* Peak gust: own line directly below the values row */
     lv_obj_t *peak = lv_label_create(parent);
+    s_peak_lbl = peak;
     lv_label_set_text(peak, "Peak gust 8 around +24h");
     style_label(peak, &lv_font_montserrat_18, OUT_SUBTLE);
     lv_obj_align_to(peak, wind_val, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 10);
@@ -266,6 +289,7 @@ void outlook_ui_create(lv_obj_t *parent)
     const int gust_w  = (col_w * s_current_gust_bft) / 12;
 
     lv_obj_t *wind_fill = lv_obj_create(strip);
+    s_wind_fill = wind_fill;
     lv_obj_set_size(wind_fill, wind_w, 8);
     lv_obj_set_pos(wind_fill, 0, 0);
     lv_obj_set_style_radius(wind_fill, 4, 0);
@@ -275,6 +299,7 @@ void outlook_ui_create(lv_obj_t *parent)
     lv_obj_clear_flag(wind_fill, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t *gust_fill = lv_obj_create(strip);
+    s_gust_fill = gust_fill;
     lv_obj_set_size(gust_fill, gust_w - wind_w, 8);
     lv_obj_set_pos(gust_fill, wind_w, 0);
     lv_obj_set_style_radius(gust_fill, 0, 0);
@@ -289,6 +314,7 @@ void outlook_ui_create(lv_obj_t *parent)
     /* markers:          y=556..576  (BOTTOM_LEFT y_ofs=-24)           */
 
     lv_obj_t *chart = lv_chart_create(parent);
+    s_chart = chart;
     lv_obj_set_size(chart, col_w, 78);
     lv_obj_align(chart, LV_ALIGN_BOTTOM_LEFT, 40, -44);
     lv_obj_set_style_bg_opa(chart, LV_OPA_TRANSP, 0);
@@ -296,16 +322,16 @@ void outlook_ui_create(lv_obj_t *parent)
     lv_obj_set_style_pad_all(chart, 0, 0);
     lv_chart_set_type(chart, LV_CHART_TYPE_BAR);
     lv_chart_set_point_count(chart, 8);
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 10);
+    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 12);
     lv_chart_set_div_line_count(chart, 2, 4);
     lv_obj_set_style_line_color(chart, OUT_GRID, LV_PART_MAIN);
     lv_obj_set_style_line_opa(chart, LV_OPA_30, LV_PART_MAIN);
 
-    lv_chart_series_t *wind_s = lv_chart_add_series(chart, OUT_SOFT, LV_CHART_AXIS_PRIMARY_Y);
-    lv_chart_series_t *gust_s = lv_chart_add_series(chart, OUT_ALERT, LV_CHART_AXIS_PRIMARY_Y);
+    s_wind_series = lv_chart_add_series(chart, OUT_SOFT, LV_CHART_AXIS_PRIMARY_Y);
+    s_gust_series = lv_chart_add_series(chart, OUT_ALERT, LV_CHART_AXIS_PRIMARY_Y);
     for (uint32_t i = 0; i < 8; ++i) {
-        wind_s->y_points[i] = s_wind_points[i];
-        gust_s->y_points[i] = s_gust_points[i];
+        s_wind_series->y_points[i] = s_wind_points[i];
+        s_gust_series->y_points[i] = s_gust_points[i];
     }
     lv_obj_set_style_bg_opa(chart, LV_OPA_COVER, LV_PART_ITEMS);
     lv_obj_set_style_radius(chart, 2, LV_PART_ITEMS);
@@ -320,18 +346,20 @@ void outlook_ui_create(lv_obj_t *parent)
     const int chart_x = 40;
     const int chart_y = 478;
     const int chart_h = 78;
-    const int chart_max = 10;
+    const int chart_max = 12;
     const int ref_y = chart_y + chart_h - ((max_bft * chart_h) / chart_max);
 
     char ref_buf[16];
     snprintf(ref_buf, sizeof(ref_buf), "%d bft", max_bft);
 
     lv_obj_t *ref_label = lv_label_create(parent);
+    s_chart_ref_label = ref_label;
     lv_label_set_text(ref_label, ref_buf);
     style_label(ref_label, &lv_font_montserrat_14, OUT_TEXT);
     lv_obj_align(ref_label, LV_ALIGN_TOP_LEFT, chart_x, ref_y - 11);
 
     lv_obj_t *ref_line = lv_obj_create(parent);
+    s_chart_ref_line = ref_line;
     lv_obj_set_size(ref_line, 314, 2);
     lv_obj_set_pos(ref_line, chart_x + 66, ref_y);
     lv_obj_set_style_bg_color(ref_line, OUT_SUBTLE, 0);
@@ -354,5 +382,95 @@ void outlook_ui_create(lv_obj_t *parent)
         lv_obj_set_width(lbl, 42);
         lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_align(lbl, LV_ALIGN_BOTTOM_LEFT, 43 + (i * 48), -24);
+    }
+}
+
+void outlook_ui_set_current(int wind_bft, int gust_bft, int dir_deg)
+{
+    if (wind_bft < 0)  wind_bft = 0;
+    if (wind_bft > 12) wind_bft = 12;
+    if (gust_bft < 0)  gust_bft = 0;
+    if (gust_bft > 12) gust_bft = 12;
+    if (gust_bft < wind_bft) gust_bft = wind_bft;
+    dir_deg = ((dir_deg % 360) + 360) % 360;
+
+    s_current_wind_bft = (int16_t)wind_bft;
+    s_current_gust_bft = (int16_t)gust_bft;
+    s_current_dir_deg  = (int16_t)dir_deg;
+
+    char buf[8];
+
+    if (s_wind_val_lbl != NULL) {
+        snprintf(buf, sizeof(buf), "%d", wind_bft);
+        lv_label_set_text(s_wind_val_lbl, buf);
+        lv_obj_set_style_text_color(s_wind_val_lbl, severity_color(wind_bft), 0);
+    }
+
+    if (s_gust_val_lbl != NULL) {
+        snprintf(buf, sizeof(buf), "%d", gust_bft);
+        lv_label_set_text(s_gust_val_lbl, buf);
+        lv_obj_set_style_text_color(s_gust_val_lbl, severity_color(gust_bft), 0);
+    }
+
+    if (s_wind_fill != NULL && s_gust_fill != NULL) {
+        const int col_w = 380;
+        int wind_w = (col_w * wind_bft) / 12;
+        int gust_w = (col_w * gust_bft) / 12;
+        if (wind_w > col_w) wind_w = col_w;
+        if (gust_w > col_w) gust_w = col_w;
+
+        lv_obj_set_size(s_wind_fill, wind_w, 8);
+        lv_obj_set_style_bg_color(s_wind_fill, severity_color(wind_bft), 0);
+
+        lv_obj_set_size(s_gust_fill, gust_w - wind_w, 8);
+        lv_obj_set_pos(s_gust_fill, wind_w, 0);
+        lv_obj_set_style_bg_color(s_gust_fill, severity_color(gust_bft), 0);
+    }
+
+    if (s_compass != NULL) {
+        lv_obj_invalidate(s_compass);
+    }
+}
+
+void outlook_ui_set_forecast(const int wind_bft[8], const int gust_bft[8],
+                             int peak_gust_bft, int peak_hour_offset)
+{
+    if (wind_bft == NULL || gust_bft == NULL) return;
+
+    int16_t max_bft = 0;
+    for (int i = 0; i < 8; ++i) {
+        int w = wind_bft[i]; if (w < 0) w = 0; if (w > 12) w = 12;
+        int g = gust_bft[i]; if (g < 0) g = 0; if (g > 12) g = 12;
+        s_wind_points[i] = (int16_t)w;
+        s_gust_points[i] = (int16_t)g;
+        if (s_wind_points[i] > max_bft) max_bft = s_wind_points[i];
+        if (s_gust_points[i] > max_bft) max_bft = s_gust_points[i];
+    }
+
+    if (s_chart != NULL && s_wind_series != NULL && s_gust_series != NULL) {
+        for (uint32_t i = 0; i < 8; ++i) {
+            s_wind_series->y_points[i] = s_wind_points[i];
+            s_gust_series->y_points[i] = s_gust_points[i];
+        }
+        lv_chart_refresh(s_chart);
+    }
+
+    if (s_peak_lbl != NULL) {
+        if (peak_gust_bft < 0)  peak_gust_bft = 0;
+        if (peak_gust_bft > 12) peak_gust_bft = 12;
+        if (peak_hour_offset < 0) peak_hour_offset = 0;
+        lv_label_set_text_fmt(s_peak_lbl, "Peak gust %d around +%dh",
+                              peak_gust_bft, peak_hour_offset);
+    }
+
+    if (s_chart_ref_label != NULL && s_chart_ref_line != NULL) {
+        const int chart_x   = 40;
+        const int chart_y   = 478;
+        const int chart_h   = 78;
+        const int chart_max = 12;
+        const int ref_y     = chart_y + chart_h - ((max_bft * chart_h) / chart_max);
+        lv_label_set_text_fmt(s_chart_ref_label, "%d bft", max_bft);
+        lv_obj_align(s_chart_ref_label, LV_ALIGN_TOP_LEFT, chart_x, ref_y - 11);
+        lv_obj_set_pos(s_chart_ref_line, chart_x + 66, ref_y);
     }
 }

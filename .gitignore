@@ -8,6 +8,7 @@ managed_components/
 # Auto-generated build counter
 build_number.txt
 main/build_number.h
+targets/*/main/build_number.h
 
 # Python
 __pycache__/
@@ -22,9 +23,9 @@ targets/*/main/config.h
 
 # Private reference material / screenshots / other projects
 local_data/
+local_docs/
 old_code/
 
 # Editor
 .vscode/
 *.swp
-

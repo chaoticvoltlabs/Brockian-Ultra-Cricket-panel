@@ -37,12 +37,15 @@
 #include "ui_pages.h"
 #include "ui_indoor.h"
 #include "ui_controls.h"
+#include "ui_clock.h"
+#include "ui_theme.h"
 #include "net_wifi.h"
 #include "panel_api.h"
 #include "app_lvgl_lock.h"
 #include "esp_netif_sntp.h"
 
 static const char *TAG = "buc";
+static const bool PANEL_NIGHT_MODE_DEFAULT = false;
 
 static void page3_scene_press_cb(int index, ui_ctrl_press_kind_t kind)
 {
@@ -59,6 +62,13 @@ static void page3_scene_press_cb(int index, ui_ctrl_press_kind_t kind)
 static void page3_target_press_cb(int index)
 {
     panel_api_send_target_command(index);
+
+    ui_ctrl_state_t state = ui_controls_get_target_state(index);
+    if (state == CTRL_ON) {
+        ui_controls_set_target_state(index, CTRL_OFF);
+    } else if (state == CTRL_OFF) {
+        ui_controls_set_target_state(index, CTRL_ON);
+    }
 }
 
 /* ── LVGL thread-safety lock ────────────────────────────────────────── */
@@ -137,6 +147,12 @@ static void wifi_status_timer_cb(lv_timer_t *t)
     ui_wind_strip_set_connected(connected);
 }
 
+static void clock_timer_cb(lv_timer_t *t)
+{
+    (void)t;
+    ui_clock_tick();
+}
+
 /* ── LVGL task loop ─────────────────────────────────────────────────── */
 #define LVGL_MIN_DELAY_MS  (1000 / CONFIG_FREERTOS_HZ)  /* avoid WDT */
 #define LVGL_MAX_DELAY_MS  500
@@ -182,6 +198,7 @@ void app_main(void)
 
     /* 2. LVGL core */
     lv_init();
+    ui_theme_set_night_mode(PANEL_NIGHT_MODE_DEFAULT);
 
     /* 3. Create LVGL display */
     lv_display_t *display = lv_display_create(LCD_H_RES, LCD_V_RES);
@@ -226,7 +243,7 @@ void app_main(void)
     {
         /* Dark screen background */
         lv_obj_t *scr = lv_display_get_screen_active(display);
-        lv_obj_set_style_bg_color(scr, COL_BG, 0);
+        lv_obj_set_style_bg_color(scr, ui_theme_screen_bg(), 0);
         lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
         lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -236,17 +253,22 @@ void app_main(void)
         /* Right-side page container (500 px, swipeable) */
         ui_pages_create(scr);
 
-        /* Page 1 right: compass rose + wind strip */
-        lv_obj_t *p1r = ui_pages_get_right_page(0);
-        ui_compass_create(p1r);
-        ui_wind_strip_create(p1r);
+        /* Page 0 right: compass + wind strip */
+        lv_obj_t *p0r = ui_pages_get_right_page(0);
+        ui_compass_create(p0r);
+        ui_wind_strip_create(p0r);
+
+        /* Page 1 right: analog clock */
+        lv_obj_t *p1r = ui_pages_get_right_page(1);
+        ui_clock_create(p1r);
+        ui_clock_tick();
 
         /* Page 2 right: indoor climate matrix */
-        lv_obj_t *p2r = ui_pages_get_right_page(1);
+        lv_obj_t *p2r = ui_pages_get_right_page(2);
         ui_indoor_create(p2r);
 
-        /* Page 3 right: scene triggers + direct controls */
-        lv_obj_t *p3r = ui_pages_get_right_page(2);
+        /* Page 4 right: scene triggers + direct controls */
+        lv_obj_t *p3r = ui_pages_get_right_page(3);
         ui_controls_create(p3r);
         ui_controls_set_scene_press_cb(page3_scene_press_cb);
         ui_controls_set_target_press_cb(page3_target_press_cb);
@@ -256,17 +278,19 @@ void app_main(void)
         ui_controls_set_target_state(1, CTRL_OFF);
         ui_controls_set_target_state(2, CTRL_OFF);
         ui_controls_set_target_state(3, CTRL_OFF);
-        ui_controls_set_target_state(4, CTRL_UNAVAILABLE);
-        ui_controls_set_target_state(5, CTRL_UNAVAILABLE); /* Ventilator */
+        ui_controls_set_target_state(4, CTRL_OFF);
+        ui_controls_set_target_state(5, CTRL_OFF);
         ui_controls_set_active_scene(-1);
 
         /* Notify the weather column when the visible page changes,
-         * so the secondary line can switch between Gevoel and room RH. */
+         * so the secondary line can switch between feels-like and room RH. */
         ui_pages_set_change_cb(ui_weather_set_page);
 
         /* Poll WiFi status once per second and update UI indicators.
          * Runs inside lv_timer_handler, so UI calls are already locked. */
         lv_timer_create(wifi_status_timer_cb, 1000, NULL);
+        lv_timer_create(clock_timer_cb, 1000, NULL);
+        ui_theme_apply();
     }
     _lock_release(&lvgl_api_lock);
 

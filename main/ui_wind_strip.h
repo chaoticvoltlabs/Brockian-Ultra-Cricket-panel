@@ -23,4 +23,7 @@ void ui_wind_strip_update(float wind_bft, float gust_bft);
  */
 void ui_wind_strip_set_connected(bool connected);
 
+/** Re-apply palette-dependent styles after a theme switch. */
+void ui_wind_strip_apply_theme(void);
+
 #endif /* UI_WIND_STRIP_H */

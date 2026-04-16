@@ -3,9 +3,14 @@ idf_component_register(
         "main.c"
         "display.c"
         "touch.c"
+        "panel_alert.c"
         "clock_ui.c"
         "outlook_ui.c"
         "control_ui.c"
+        "control_post.c"
+        "indoor_ui.c"
+        "weather_col.c"
+        "lv_mem_psram.c"
     INCLUDE_DIRS
         "."
     REQUIRES
@@ -15,6 +20,7 @@ idf_component_register(
         esp_event
         esp_lcd
         esp_timer
+        esp_http_client
         driver
         esp_driver_i2c
         freertos

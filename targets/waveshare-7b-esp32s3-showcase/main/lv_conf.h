@@ -13,12 +13,13 @@
 #define LV_COLOR_16_SWAP 0
 
 /* ── Memory ────────────────────────────────────────────────────────────────── */
-/* Use esp_malloc so PSRAM is available via menuconfig SPIRAM_USE_MALLOC */
+/* Route LVGL allocations to PSRAM (with fallback to internal DRAM) so the
+ * widget tree doesn't starve the internal heap. See lv_mem_psram.c. */
 #define LV_MEM_CUSTOM 1
-#  define LV_MEM_CUSTOM_INCLUDE <stdlib.h>
-#  define LV_MEM_CUSTOM_ALLOC   malloc
-#  define LV_MEM_CUSTOM_FREE    free
-#  define LV_MEM_CUSTOM_REALLOC realloc
+#  define LV_MEM_CUSTOM_INCLUDE "lv_mem_psram.h"
+#  define LV_MEM_CUSTOM_ALLOC   lv_mem_psram_alloc
+#  define LV_MEM_CUSTOM_FREE    lv_mem_psram_free
+#  define LV_MEM_CUSTOM_REALLOC lv_mem_psram_realloc
 
 /* ── HAL ───────────────────────────────────────────────────────────────────── */
 #define LV_DISP_DEF_REFR_PERIOD  16   /* ms → ~60 fps */

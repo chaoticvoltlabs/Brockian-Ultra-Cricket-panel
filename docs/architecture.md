@@ -2,65 +2,75 @@
 
 ## Purpose
 
-This firmware renders the user-facing panel UI locally on the ESP32-S3 using LVGL. It is not a thin image viewer; it is an interactive client that talks to BUC over HTTP.
+This firmware renders the panel UI locally on the ESP32-S3 with LVGL. It is an interactive client that talks to BUC over HTTP for both readback and control.
 
 ## System position
 
-The current chain is:
+The runtime chain is:
 
-1. Home Assistant normalizes data and owns scenes/switches.
-2. BUC exposes compact panel APIs and translates control intents to HA service calls.
-3. This firmware polls BUC and renders the resulting state locally.
+1. Home Assistant owns the canonical entities, scenes and helper state.
+2. BUC reshapes those into compact panel payloads and control endpoints.
+3. The panel polls BUC, renders locally, and posts user actions back upstream.
 
 ## Main modules
 
 - [`main.c`](../main/main.c)
   - LVGL startup
+  - display/touch bring-up
   - page construction
-  - page-3 command wiring
-- [`hw_init.c`](../main/hw_init.c)
-  - panel, RGB bus, backlight init
-- [`hw_touch.c`](../main/hw_touch.c)
-  - GT911 touch integration
 - [`panel_api.c`](../main/panel_api.c)
-  - read path and control path HTTP calls
+  - `GET /api/panel/config`
+  - `GET /api/panel/weather`
+  - `POST /api/panel/control`
 - [`ui_pages.c`](../main/ui_pages.c)
-  - horizontal navigation
+  - horizontal swipe container for the right-side page stack
 - [`ui_weather.c`](../main/ui_weather.c)
-  - shared left column
+  - shared left weather column
+  - global storm warning indicator
+- [`ui_compass.c`](../main/ui_compass.c)
+  - compass / wind rose page
+- [`ui_clock.c`](../main/ui_clock.c)
+  - analog clock page
 - [`ui_indoor.c`](../main/ui_indoor.c)
-  - page 2 grid
+  - indoor climate page
 - [`ui_controls.c`](../main/ui_controls.c)
-  - page 3 scenes and direct controls
+  - scenes and direct-control page
+- [`ui_theme.c`](../main/ui_theme.c)
+  - renderer-wide day/night palette switching
 
-## Current UI model
+## Current 4.3 page model
 
 ### Left column
 
-Shared across pages:
+Shared across all pages:
 
-- main weather number
-- secondary weather/room line
+- outdoor temperature / feels like
 - wind and gust
 - pressure trend
+- global storm warning overlay
 
 ### Right pages
 
-- page 1: weather instruments
-- page 2: indoor climate grid
-- page 3: scenes and direct controls
+- page 1: compass and wind strip
+- page 2: analog clock
+- page 3: indoor climate
+- page 4: scenes and direct control
 
 ## Current network contracts
 
 ### Read path
 
+- `GET /api/panel/config`
 - `GET /api/panel/weather`
 
-The panel polls this endpoint and updates:
+The panel consumes:
 
-- weather column
-- pressure trend
-- indoor tile data
+- current outdoor weather
+- `pressure_trend_24h`
+- indoor zones
+- optional `night_mode`
+- optional `page3_target_states`
+- optional ambient fields such as `ambient_brightness_pct` and `ambient_rgb`
 
 ### Control path
 
@@ -75,8 +85,19 @@ Compact request shape:
 }
 ```
 
-## Interaction notes
+Ambient-style controls may also include payload:
 
-- swipe navigation is handled at screen level for predictable one-page movement
-- button gestures bubble upward so swipe and tap can coexist
-- page 3 scene highlighting is currently local and optimistic, not HA-readback driven
+```json
+{
+  "target": "ambient",
+  "action": "set_rgb",
+  "rgb": [255, 136, 32]
+}
+```
+
+## Interaction and rendering notes
+
+- the 4.3 target currently relies on the custom swipe container in `ui_pages.c`; replacing it blindly with another navigation mechanism risks reintroducing swipe regressions
+- the 4.3 renderer uses the VSYNC-driven full-refresh path to avoid visible tearing
+- day/night theming is driven from upstream `night_mode`, not from a local schedule
+- the storm warning indicator is global so warnings stay visible regardless of the current page

@@ -11,7 +11,7 @@
 #include "ui_pages.h"
 #include "buc_display.h"
 
-#define PAGE_COUNT  3
+#define PAGE_COUNT  4
 
 static lv_obj_t *s_scroll;
 static lv_obj_t *s_pages[PAGE_COUNT];

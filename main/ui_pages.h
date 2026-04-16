@@ -4,8 +4,8 @@
  *
  * The left weather column stays fixed on the screen. Only the right
  * portion (x=300..800, 500 px wide) is scrollable and holds multiple
- * pages of right-side content (page 1: compass+strip, page 2: indoor,
- * page 3: controls).
+ * pages of right-side content (page 0: compass+strip, page 1: clock,
+ * page 3: indoor, page 4: controls).
  */
 
 #ifndef UI_PAGES_H
@@ -19,11 +19,11 @@
 
 /**
  * Create the scroll container on the screen. Call once after the left
- * column has been placed. Internally creates three 500×480 child pages.
+ * column has been placed. Internally creates four 500×480 child pages.
  */
 void ui_pages_create(lv_obj_t *screen);
 
-/** Return the right-side container for page @p index (0, 1, or 2). */
+/** Return the right-side container for page @p index (0..3). */
 lv_obj_t *ui_pages_get_right_page(int index);
 
 /** Register a callback that fires when the visible page changes. */

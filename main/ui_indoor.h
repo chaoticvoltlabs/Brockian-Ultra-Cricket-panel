@@ -25,4 +25,7 @@ void ui_indoor_create(lv_obj_t *parent);
 void ui_indoor_update(int index, float temp_c, float rh_pct,
                       bool temp_valid, bool rh_valid);
 
+/** Re-apply palette-dependent styles after a theme switch. */
+void ui_indoor_apply_theme(void);
+
 #endif /* UI_INDOOR_H */

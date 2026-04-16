@@ -24,4 +24,7 @@ void ui_compass_set_direction(float deg);
  */
 void ui_compass_set_connected(bool connected);
 
+/** Re-apply palette-dependent styles after a theme switch. */
+void ui_compass_apply_theme(void);
+
 #endif /* UI_COMPASS_H */

@@ -25,6 +25,7 @@
 #include "esp_log.h"
 #include "lvgl.h"
 #include "clock_ui.h"
+#include "panel_alert.h"
 
 static const char *TAG = "clock_ui";
 
@@ -430,6 +431,8 @@ void clock_ui_create(lv_obj_t *parent)
     lv_obj_set_style_text_font(s_lbl_room_rh, &lv_font_montserrat_24, 0);
     lv_obj_set_style_text_color(s_lbl_room_rh, CLR_SUBTLE, 0);
 
+    panel_alert_create_storm(scr, 54, 48);
+
     position_ornament_objects();
 
     ESP_LOGI(TAG, "Clock UI created (custom draw, no lv_meter)");
@@ -444,11 +447,16 @@ void clock_ui_set_room_context(const char *room_name, float temp_c, int rh_pct)
     snprintf(temp_buf, sizeof(temp_buf), "%.1f", temp_c);
     snprintf(rh_buf, sizeof(rh_buf), "%d%% RH", rh_pct);
 
-    if (s_lbl_room_temp) {
+    static char s_last_temp[24] = "";
+    static char s_last_rh[24]   = "";
+
+    if (s_lbl_room_temp && strcmp(temp_buf, s_last_temp) != 0) {
         lv_label_set_text(s_lbl_room_temp, temp_buf);
+        strncpy(s_last_temp, temp_buf, sizeof(s_last_temp) - 1);
     }
-    if (s_lbl_room_rh) {
+    if (s_lbl_room_rh && strcmp(rh_buf, s_last_rh) != 0) {
         lv_label_set_text(s_lbl_room_rh, rh_buf);
+        strncpy(s_last_rh, rh_buf, sizeof(s_last_rh) - 1);
     }
 }
 

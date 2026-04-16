@@ -1,6 +1,6 @@
 /**
  * @file  ui_controls.h
- * @brief Page 3: scene triggers + direct light/switch controls.
+ * @brief Page 4: scene triggers + direct light/switch controls.
  *
  * Top section  : up to 4 scene/automation buttons (stateless triggers).
  * Bottom section: up to 6 direct target buttons (on/off/unavailable).
@@ -56,5 +56,11 @@ void ui_controls_set_target_label(int index, const char *label);
  * @param state  CTRL_OFF / CTRL_ON / CTRL_UNAVAILABLE
  */
 void ui_controls_set_target_state(int index, ui_ctrl_state_t state);
+
+/** Read the current visual state for a direct-control button. */
+ui_ctrl_state_t ui_controls_get_target_state(int index);
+
+/** Re-apply palette-dependent styles after a theme switch. */
+void ui_controls_apply_theme(void);
 
 #endif /* UI_CONTROLS_H */
